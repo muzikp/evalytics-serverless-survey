@@ -1,0 +1,13 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/templates"
+    }
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiQURNSU4wMDEiLCJlbWFpbCI6Im11emlrcEBnbWFpbC5jb20iLCJyb2xlcyI6eyJhZG1pbiI6MSwibWFzdGVyLWFkbWluIjoxfSwiaWF0IjoxNzY3NDYzMTg1LCJleHAiOjE3Njc0NjY3ODV9.JXkfrW9QYv-y4JU1D8rmIf-jjOmlycFeCfrbEHZKT2c"
+  },
+  "body": "{\"name\":\"Customer Satisfaction\",\"description\":\"Basic customer satisfaction survey\",\"surveyjs_version\":\"1.9.116\",\"data\":{\"pages\":[{\"name\":\"page1\",\"elements\":[{\"type\":\"rating\",\"name\":\"satisfaction\",\"title\":\"How satisfied are you?\",\"rateMax\":5},{\"type\":\"comment\",\"name\":\"feedback\",\"title\":\"Additional comments\"}]}]}}"
+}

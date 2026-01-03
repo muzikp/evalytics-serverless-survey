@@ -1,0 +1,23 @@
+{
+  "name": "evalytics-serverless-survey",
+  "private": true,
+  "workspaces": [
+    "UI",
+    "API"
+  ],
+  "scripts": {
+    "dev:ui": "npm --workspace UI run dev",
+    "build:ui": "npm --workspace UI run build",
+    "lint:ui": "npm --workspace UI run lint",
+    "dev:api": "npm --workspace API run dev",
+    "test:api": "npm --workspace API run test",
+    "lint:api": "npm --workspace API run lint",
+    "sam:validate": "npm --workspace API run sam:validate",
+    "sam:build": "npm --workspace API run sam:build",
+    "sam:local": "npm --workspace API run sam:local",
+    "sam:deploy": "npm --workspace API run sam:deploy",
+    "lint": "npm -ws run lint",
+    "test": "npm -ws run test",
+    "build": "npm -ws run build"
+  }
+}

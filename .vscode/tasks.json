@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Dev: API (SAM local)",
+      "type": "shell",
+      "command": "npm run sam:local",
+      "problemMatcher": []
+    },
+    {
+      "label": "Validate: SAM",
+      "type": "shell",
+      "command": "npm run sam:validate",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build: UI",
+      "type": "shell",
+      "command": "npm run build:ui",
+      "problemMatcher": []
+    }
+  ]
+}

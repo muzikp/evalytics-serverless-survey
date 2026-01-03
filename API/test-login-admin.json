@@ -1,0 +1,12 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/auth"
+    }
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"email\":\"muzikp@gmail.com\",\"password\":\"Profesor764\"}"
+}

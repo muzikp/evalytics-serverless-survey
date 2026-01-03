@@ -1,0 +1,13 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/campaigns"
+    }
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiQURNSU4wMDEiLCJlbWFpbCI6Im11emlrcEBnbWFpbC5jb20iLCJyb2xlcyI6eyJhZG1pbiI6MSwibWFzdGVyLWFkbWluIjoxfSwiaWF0IjoxNzY3NDYzMTg1LCJleHAiOjE3Njc0NjY3ODV9.JXkfrW9QYv-y4JU1D8rmIf-jjOmlycFeCfrbEHZKT2c"
+  },
+  "body": "{\"snapshot_id\":\"HMSHS2KEDNGC703V\",\"title\":{\"en\":\"Customer Feedback Survey\"},\"description\":{\"en\":\"We value your opinion\"},\"email_template\":{\"invite\":{\"subject\":\"Please complete our survey\",\"html\":\"<p>Hi,</p><p>Please click here: {{survey_link}}</p>\"}},\"allow_multiple_responses\":false}"
+}

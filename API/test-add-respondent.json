@@ -1,0 +1,13 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/campaigns/AE275B09RYZWJ7SB/respondents"
+    }
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiQURNSU4wMDEiLCJlbWFpbCI6Im11emlrcEBnbWFpbC5jb20iLCJyb2xlcyI6eyJhZG1pbiI6MSwibWFzdGVyLWFkbWluIjoxfSwiaWF0IjoxNzY3NDYzMTg1LCJleHAiOjE3Njc0NjY3ODV9.JXkfrW9QYv-y4JU1D8rmIf-jjOmlycFeCfrbEHZKT2c"
+  },
+  "body": "{\"respondents\":[{\"email\":\"respondent@example.com\"}]}"
+}

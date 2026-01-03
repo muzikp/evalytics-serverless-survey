@@ -1,0 +1,44 @@
+name: Deploy API (AWS SAM)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "API/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/deploy-api.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm install
+
+      - name: Setup SAM
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: eu-central-1
+
+      - name: SAM build
+        run: npm run sam:build
+
+      - name: SAM deploy
+        run: |
+          cd API
+          sam deploy             --stack-name evalytics-serverless-survey             --resolve-s3             --capabilities CAPABILITY_IAM             --no-fail-on-empty-changeset

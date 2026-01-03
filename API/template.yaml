@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Evalytics Serverless Survey API (SAM)
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        APP_ENV: prod
+        # DB_* doporučuji v produkci tahat ze Secrets Manager / SSM, ne z plaintext env.
+        DB_HOST: ""
+        DB_PORT: "3306"
+        DB_USER: ""
+        DB_PASSWORD: ""
+        DB_NAME: ""
+        SES_FROM: "info@evalytics.cz"
+        PUBLIC_BASE_URL: "https://survey.evalytics.cz"
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - https://survey.evalytics.cz
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-API-Token
+          - X-Respondent-Token
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: index.handler
+      Events:
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+  EmailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+
+  EmailWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: worker.handler
+      Timeout: 60
+      Events:
+        FromQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EmailQueue.Arn
+            BatchSize: 5
+
+
+  SesEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: evalytics-ses-events
+
+  SesEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+
+  SesEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SesEventsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt SesEventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref SesEventsTopic
+
+  SesEventsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SesEventsTopic
+      Protocol: sqs
+      Endpoint: !GetAtt SesEventsQueue.Arn
+      RawMessageDelivery: true
+
+  EmailEventWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: emailEvents.handler
+      Timeout: 60
+      Events:
+        FromSesEventsQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SesEventsQueue.Arn
+            BatchSize: 10
+
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API endpoint
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"

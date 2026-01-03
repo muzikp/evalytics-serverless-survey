@@ -1,0 +1,13 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/survey/n-nPos1Ld2OJ3AZcPbu5AJDb-eBd6TrJGsNhTiLheCs/response"
+    }
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Respondent-Token": "_5MVQR9wsO5wDQQsC9Liolmuulk1bs5k7Gs5M53w9FXNY95Z-NdMTM5MI2JAFEAT"
+  },
+  "body": "{\"data\":{\"satisfaction\":5,\"feedback\":\"Great service!\"},\"status\":\"completed\"}"
+}

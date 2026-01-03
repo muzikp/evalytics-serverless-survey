@@ -1,0 +1,10 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/survey"
+    }
+  },
+  "headers": {},
+  "queryStringParameters": {}
+}

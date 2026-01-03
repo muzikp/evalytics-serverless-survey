@@ -1,0 +1,537 @@
+{
+  "info": {
+    "name": "Evalytics Survey API - Complete Tests",
+    "description": "Complete test collection for Evalytics Serverless Survey API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:3000",
+      "type": "string"
+    },
+    {
+      "key": "apiToken",
+      "value": "G-Y44Oz86mWTEbNdhheB52qzBJgdaY5v7Bem3C_xmDw",
+      "type": "string"
+    },
+    {
+      "key": "jwtToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "templateId",
+      "value": "DGFVT9W6A8M6N1ZF",
+      "type": "string"
+    },
+    {
+      "key": "snapshotId",
+      "value": "HMSHS2KEDNGC703V",
+      "type": "string"
+    },
+    {
+      "key": "campaignId",
+      "value": "AE275B09RYZWJ7SB",
+      "type": "string"
+    },
+    {
+      "key": "publicId",
+      "value": "n-nPos1Ld2OJ3AZcPbu5AJDb-eBd6TrJGsNhTiLheCs",
+      "type": "string"
+    },
+    {
+      "key": "respondentToken",
+      "value": "_5MVQR9wsO5wDQQsC9Liolmuulk1bs5k7Gs5M53w9FXNY95Z-NdMTM5MI2JAFEAT",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login (get JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('jwtToken', json.token);",
+                  "    pm.test('JWT token received', () => {",
+                  "        pm.expect(json.token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"muzikp@gmail.com\",\n  \"password\": \"Profesor764\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth"]
+            }
+          }
+        },
+        {
+          "name": "Get current user info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "List API tokens",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api-tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api-tokens"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Templates",
+      "item": [
+        {
+          "name": "List templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates"]
+            }
+          }
+        },
+        {
+          "name": "Get template by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/templates/{{templateId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates", "{{templateId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('templateId', json.template_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Customer Satisfaction Survey\",\n  \"description\": \"Measure customer satisfaction\",\n  \"surveyjs_version\": \"1.9.116\",\n  \"data\": {\n    \"pages\": [\n      {\n        \"name\": \"page1\",\n        \"elements\": [\n          {\n            \"type\": \"rating\",\n            \"name\": \"satisfaction\",\n            \"title\": \"How satisfied are you with our service?\",\n            \"rateMax\": 5\n          },\n          {\n            \"type\": \"comment\",\n            \"name\": \"feedback\",\n            \"title\": \"Any additional feedback?\"\n          }\n        ]\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["templates"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Snapshots",
+      "item": [
+        {
+          "name": "List snapshots",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/snapshots",
+              "host": ["{{baseUrl}}"],
+              "path": ["snapshots"]
+            }
+          }
+        },
+        {
+          "name": "Create snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('snapshotId', json.snapshot_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_id\": \"{{templateId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/snapshots",
+              "host": ["{{baseUrl}}"],
+              "path": ["snapshots"]
+            }
+          }
+        },
+        {
+          "name": "Get snapshot by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/snapshots/{{snapshotId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["snapshots", "{{snapshotId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Campaigns",
+      "item": [
+        {
+          "name": "List campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaigns"]
+            }
+          }
+        },
+        {
+          "name": "Create campaign",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('campaignId', json.campaign_id);",
+                  "    pm.collectionVariables.set('publicId', json.public_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot_id\": \"{{snapshotId}}\",\n  \"title\": {\"en\": \"Q1 Customer Feedback\"},\n  \"description\": {\"en\": \"Help us improve our service\"},\n  \"email_template\": {\n    \"invite\": {\n      \"subject\": \"Please complete our survey\",\n      \"html\": \"<p>Dear customer,</p><p>Please click: {{survey_link}}</p>\"\n    }\n  },\n  \"allow_multiple_responses\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaigns"]
+            }
+          }
+        },
+        {
+          "name": "Get campaign by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/{{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}"]
+            }
+          }
+        },
+        {
+          "name": "Add respondents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.respondents && json.respondents.length > 0) {",
+                  "        pm.collectionVariables.set('respondentToken', json.respondents[0].token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"respondents\": [\n    {\"email\": \"test1@example.com\"},\n    {\"email\": \"test2@example.com\"}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/{{campaignId}}/respondents",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "respondents"]
+            }
+          }
+        },
+        {
+          "name": "List respondents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/campaigns/{{campaignId}}/respondents",
+              "host": ["{{baseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "respondents"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Public Survey",
+      "item": [
+        {
+          "name": "List public surveys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/survey",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey"]
+            }
+          }
+        },
+        {
+          "name": "Get survey by public ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Respondent-Token",
+                "value": "{{respondentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/survey/{{publicId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey", "{{publicId}}"]
+            }
+          }
+        },
+        {
+          "name": "Submit survey response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Respondent-Token",
+                "value": "{{respondentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"satisfaction\": 5,\n    \"feedback\": \"Excellent service via Postman!\"\n  },\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/survey/{{publicId}}/response",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey", "{{publicId}}", "response"]
+            }
+          }
+        },
+        {
+          "name": "Get current response",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Respondent-Token",
+                "value": "{{respondentToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/survey/{{publicId}}/response",
+              "host": ["{{baseUrl}}"],
+              "path": ["survey", "{{publicId}}", "response"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Responses (Admin)",
+      "item": [
+        {
+          "name": "List all responses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["responses"]
+            }
+          }
+        },
+        {
+          "name": "List responses by campaign",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Token",
+                "value": "{{apiToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/responses?campaign_id={{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["responses"],
+              "query": [
+                {
+                  "key": "campaign_id",
+                  "value": "{{campaignId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

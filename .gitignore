@@ -1,0 +1,33 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Env secrets
+.env
+.env.*
+!*.example
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# Builds
+dist/
+build/
+.svelte-kit/
+coverage/
+
+# SAM
+.aws-sam/
+samconfig.toml
+
+# Misc
+*.tmp
+*.log

@@ -1,0 +1,11 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/templates"
+    }
+  },
+  "headers": {
+    "X-API-Token": "G-Y44Oz86mWTEbNdhheB52qzBJgdaY5v7Bem3C_xmDw"
+  }
+}
