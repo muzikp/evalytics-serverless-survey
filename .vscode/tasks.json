@@ -24,8 +24,8 @@
     {
       "label": "start-api",
       "type": "shell",
-      "command": "cd ${workspaceFolder}/API; sam build; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🚀 API Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://127.0.0.1:3000' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; sam local start-api --port 3000 --template .aws-sam/build/template.yaml --docker-network host",
-      "isBackground": true,
+      "command": "cd ${workspaceFolder}/API; sam build; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🚀 API Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://127.0.0.1:3000' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; Start-Process powershell -ArgumentList '-NoExit', '-Command', 'sam local start-api --port 3000 --template .aws-sam/build/template.yaml --env-vars env.json --docker-network host' -WorkingDirectory '${workspaceFolder}/API'",
+      "isBackground": false,
       "problemMatcher": {
         "pattern": {
           "regexp": "^(.*)$",

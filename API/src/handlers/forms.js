@@ -215,19 +215,6 @@ async function getForm(formId) {
     }))
   });
 }
-    [FormId]
-  );
-
-  if (!Form) {
-    return errorResponse(404, 'NOT_FOUND', 'Form not found');
-  }
-
-  return apiResponse(200, {
-    ...Form,
-    languages: typeof Form.languages === 'string' ? JSON.parse(Form.languages) : Form.languages,
-    data: typeof Form.data === 'string' ? JSON.parse(Form.data) : Form.data
-  });
-}
 
 async function updateForm(event, user, formId) {
   const body = parseBody(event);
