@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@monaco-editor/loader": "^1.7.0",
+    "survey-core": "^2.5.4",
+    "survey-knockout": "^1.12.58",
     "svelte-monaco": "^1.0.4"
   }
 }

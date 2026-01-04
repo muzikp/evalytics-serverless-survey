@@ -119,8 +119,8 @@ async function listFormVersions(event, user) {
   const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
   let sql = `
-    SELECT fv.version_id, fv.form_id, fv.form_name, fv.version, fv.surveyjs_version,
-           fv.languages, fv.created, fv.last_update, fv.created_by, fv.last_modified_by,
+    SELECT fv.version_id, fv.form_id, fv.form_name, fv.version, fv.version_description,
+           fv.surveyjs_version, fv.languages, fv.created, fv.last_update, fv.created_by, fv.last_modified_by,
            (SELECT COUNT(*) FROM campaigns WHERE version_id = fv.version_id) as campaign_count
     FROM form_versions fv
     ${whereClause}
@@ -151,7 +151,7 @@ async function listFormVersions(event, user) {
 
 async function createFormVersion(event, user) {
   const body = parseBody(event);
-  const { form_id, surveyjs_version, languages, data } = body;
+  const { form_id, surveyjs_version, languages, data, version_description } = body;
 
   if (!form_id || !data) {
     return errorResponse(400, 'MISSING_FIELDS', 'form_id and data are required');
@@ -179,13 +179,14 @@ async function createFormVersion(event, user) {
   const now = formatDateTime();
 
   await query(
-    `INSERT INTO form_versions (version_id, form_id, form_name, version, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO form_versions (version_id, form_id, form_name, version, version_description, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       versionId,
       form_id,
       form.name,
       newVersionNumber,
+      version_description || `Version ${newVersionNumber}`,
       surveyjs_version || lastVersion.surveyjs_version || '1.9',
       JSON.stringify(languages || ['en']),
       JSON.stringify(data),
@@ -201,8 +202,8 @@ async function createFormVersion(event, user) {
 
 async function getFormVersion(versionId) {
   const version = await queryOne(
-    `SELECT fv.version_id, fv.form_id, fv.form_name, fv.version, fv.surveyjs_version,
-            fv.languages, fv.data, fv.created, fv.last_update, fv.created_by, fv.last_modified_by,
+    `SELECT fv.version_id, fv.form_id, fv.form_name, fv.version, fv.version_description,
+            fv.surveyjs_version, fv.languages, fv.data, fv.created, fv.last_update, fv.created_by, fv.last_modified_by,
             (SELECT COUNT(*) FROM campaigns WHERE version_id = fv.version_id) as campaign_count
      FROM form_versions fv
      WHERE fv.version_id = ?`,
@@ -222,7 +223,7 @@ async function getFormVersion(versionId) {
 
 async function updateFormVersion(event, user, versionId) {
   const body = parseBody(event);
-  const { surveyjs_version, languages, data } = body;
+  const { surveyjs_version, languages, data, version_description } = body;
 
   // Check if version has active campaigns
   const activeCampaigns = await query(
@@ -251,6 +252,10 @@ async function updateFormVersion(event, user, versionId) {
   if (data !== undefined) {
     updates.push('data = ?');
     params.push(JSON.stringify(data));
+  }
+  if (version_description !== undefined) {
+    updates.push('version_description = ?');
+    params.push(version_description);
   }
 
   if (updates.length === 0) {

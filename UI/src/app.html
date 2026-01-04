@@ -4,6 +4,15 @@
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		
+		<!-- Load Knockout.js globally for SurveyJS -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.5.1/knockout-latest.min.js" crossorigin="anonymous"></script>
+		
+		<!-- Load SurveyJS from local files -->
+		<link href="%sveltekit.assets%/surveyjs/defaultV2.min.css" rel="stylesheet" type="text/css" />
+		<script src="%sveltekit.assets%/surveyjs/survey.core.min.js"></script>
+		<script src="%sveltekit.assets%/surveyjs/survey.ko.min.js"></script>
+		
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

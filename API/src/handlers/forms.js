@@ -144,7 +144,7 @@ async function listForms(event, user) {
 
 async function createForm(event, user) {
   const body = parseBody(event);
-  const { name, surveyjs_version, languages, data } = body;
+  const { name, surveyjs_version, languages, data, version_description } = body;
 
   if (!name || !surveyjs_version || !data) {
     return errorResponse(400, 'MISSING_FIELDS', 'name, surveyjs_version, and data are required');
@@ -163,13 +163,14 @@ async function createForm(event, user) {
 
   // Create first version (v1)
   await query(
-    `INSERT INTO form_versions (version_id, form_id, form_name, version, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO form_versions (version_id, form_id, form_name, version, version_description, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       versionId,
       formId,
       name,
       1,
+      version_description || 'Initial version',
       surveyjs_version,
       JSON.stringify(languages || ['en']),
       JSON.stringify(data),
@@ -199,7 +200,7 @@ async function getForm(formId) {
 
   // Get all versions of this form
   const versions = await query(
-    `SELECT version_id, form_id, version, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by
+    `SELECT version_id, form_id, version, version_description, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by
      FROM form_versions
      WHERE form_id = ?
      ORDER BY version DESC`,
@@ -218,7 +219,7 @@ async function getForm(formId) {
 
 async function updateForm(event, user, formId) {
   const body = parseBody(event);
-  const { name, surveyjs_version, languages, data } = body;
+  const { name, surveyjs_version, languages, data, version_description } = body;
 
   // At minimum need data to create new version
   if (!data) {
@@ -265,13 +266,14 @@ async function updateForm(event, user, formId) {
     const newVersionNumber = latestVersion.version + 1;
 
     await query(
-      `INSERT INTO form_versions (version_id, form_id, form_name, version, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO form_versions (version_id, form_id, form_name, version, version_description, surveyjs_version, languages, data, created, last_update, created_by, last_modified_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         newVersionId,
         formId,
         useName,
         newVersionNumber,
+        version_description || `Version ${newVersionNumber}`,
         useSurveyJsVersion,
         JSON.stringify(useLanguages),
         JSON.stringify(data),
@@ -294,12 +296,13 @@ async function updateForm(event, user, formId) {
     // No active campaigns - update existing version
     await query(
       `UPDATE form_versions 
-       SET surveyjs_version = ?, languages = ?, data = ?, last_update = ?, last_modified_by = ?
+       SET surveyjs_version = ?, languages = ?, data = ?, version_description = ?, last_update = ?, last_modified_by = ?
        WHERE version_id = ?`,
       [
         useSurveyJsVersion,
         JSON.stringify(useLanguages),
         JSON.stringify(data),
+        version_description || latestVersion.version_description,
         now,
         user.user_id,
         latestVersion.version_id

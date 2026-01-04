@@ -3,26 +3,53 @@
   import { base } from "$app/paths";
   import { auth } from "$lib/auth.js";
   import { goto } from "$app/navigation";
+  import {
+    currentLanguage,
+    languages,
+    translations_store,
+  } from "$lib/i18n/index.js";
+  import Toast from "$lib/components/Toast.svelte";
+  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
+
+  $: t = $translations_store;
 
   function handleLogout() {
     auth.logout();
     goto("/login");
   }
+
+  function changeLanguage(lang) {
+    currentLanguage.set(lang);
+  }
 </script>
 
 <header class="header">
   <div class="brand">
-    <a class="brandLink" href="{base}/">Evalytics Survey</a>
+    <a class="brandLink" href="/" on:click|preventDefault={() => goto("/")}
+      >{t("app.name")}</a
+    >
   </div>
   <nav class="nav">
     {#if $auth}
-      <a href="{base}/admin/forms">Forms</a>
-      <a href="{base}/admin/form-versions">Versions</a>
+      <a href="{base}/admin/forms">{t("forms.title")}</a>
+      <a href="{base}/admin/campaigns">{t("campaigns.title")}</a>
+      <div class="language-switcher">
+        {#each Object.entries(languages) as [code, name]}
+          <button
+            class="lang-btn"
+            class:active={$currentLanguage === code}
+            on:click={() => changeLanguage(code)}
+            title={name}
+          >
+            {code.toUpperCase()}
+          </button>
+        {/each}
+      </div>
       <button on:click={handleLogout} class="logout-btn"
-        >Logout ({$auth.user?.email || "User"})</button
+        >{t("auth.logout")} ({$auth.user?.email || "User"})</button
       >
     {:else}
-      <a href="{base}/login">Login</a>
+      <a href="{base}/login">{t("auth.login")}</a>
     {/if}
   </nav>
 </header>
@@ -30,6 +57,9 @@
 <main class="main">
   <slot />
 </main>
+
+<Toast />
+<ConfirmDialog />
 
 <style>
   .header {
@@ -105,7 +135,37 @@
   .logout-btn:hover {
     color: var(--color-danger);
   }
+  .language-switcher {
+    display: flex;
+    gap: 0.5rem;
+    border-left: 1px solid var(--color-border);
+    padding-left: 1rem;
+    margin-left: 0.5rem;
+  }
 
+  .lang-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .lang-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .lang-btn.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
   .main {
     max-width: 1400px;
     margin: 0 auto;

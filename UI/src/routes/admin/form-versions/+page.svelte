@@ -5,6 +5,8 @@
   import { auth } from "$lib/auth.js";
   import { getFormVersions, deleteFormVersion, getForms } from "$lib/api.js";
   import Spinner from "$lib/components/Spinner.svelte";
+  import { showConfirm } from "$lib/confirm.js";
+  import { toast } from "$lib/toast.js";
 
   let versions = [];
   let loading = true;
@@ -47,19 +49,24 @@
   }
 
   async function handleDelete(id, name, version) {
-    if (
-      !confirm(
-        `Delete version "${name}" v${version}?\n\nThis may affect campaigns using this version.`,
-      )
-    ) {
+    const confirmed = await showConfirm({
+      title: "Delete Form Version",
+      message: `Are you sure you want to delete "${name}" v${version}?\n\nThis may affect campaigns using this version.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) {
       return;
     }
 
     try {
       await deleteFormVersion(id);
+      toast.success(`Version ${version} deleted successfully`);
       await loadVersions();
     } catch (err) {
-      alert("Delete failed: " + err.message);
+      toast.error("Delete failed: " + err.message);
     }
   }
 

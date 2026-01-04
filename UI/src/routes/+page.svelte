@@ -5,7 +5,7 @@
 
   onMount(() => {
     if ($auth) {
-      goto("/admin/templates");
+      goto("/admin/forms");
     } else {
       goto("/login");
     }

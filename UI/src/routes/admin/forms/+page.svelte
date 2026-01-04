@@ -4,6 +4,12 @@
   import { auth } from "$lib/auth.js";
   import { getForms, deleteForm } from "$lib/api.js";
   import Spinner from "$lib/components/Spinner.svelte";
+  import { translations_store } from "$lib/i18n/index.js";
+  import { timeAgo, formatDateTime } from "$lib/utils/time.js";
+  import { toast } from "$lib/toast.js";
+  import { showConfirm } from "$lib/confirm.js";
+
+  $: t = $translations_store;
 
   let forms = [];
   let loading = true;
@@ -69,19 +75,24 @@
   }
 
   async function handleDelete(id, name) {
-    if (
-      !confirm(
-        `Delete form "${name}"?\n\nThis will also delete all associated versions and may affect active campaigns.`,
-      )
-    ) {
+    const confirmed = await showConfirm({
+      title: "Delete Form",
+      message: `Are you sure you want to delete "${name}"?\n\nThis will also delete all associated versions and may affect active campaigns.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) {
       return;
     }
 
     try {
       await deleteForm(id);
+      toast.success(`Form "${name}" deleted successfully`);
       await loadForms();
     } catch (err) {
-      alert("Delete failed: " + err.message);
+      toast.error("Delete failed: " + err.message);
     }
   }
 
@@ -106,34 +117,34 @@
 </script>
 
 <svelte:head>
-  <title>Forms - Evalytics</title>
+  <title>{t("forms.title")} - {t("app.name")}</title>
 </svelte:head>
 
 <div class="page-header">
-  <h1>Survey Forms</h1>
-  <a href="/admin/Forms/new" class="btn-primary">Create Form</a>
+  <h1>{t("forms.title")}</h1>
+  <a href="/admin/forms/new" class="btn-primary">{t("forms.new")}</a>
 </div>
 
 <div class="filters">
   <input
     type="text"
-    placeholder="Search by name..."
+    placeholder={t("common.search")}
     bind:value={filters.q}
     on:input={handleFilterChange}
   />
 
   <select bind:value={filters.surveyjs_version} on:change={handleFilterChange}>
-    <option value="">All versions</option>
+    <option value="">{t("forms.version")} - All</option>
     {#each availableVersions as version}
       <option value={version}>{version}</option>
     {/each}
   </select>
 
   <div class="language-filter">
-    <div class="filter-label">Languages:</div>
+    <div class="filter-label">{t("forms.languages")}:</div>
     <div class="language-checkboxes">
       {#if availableLanguages.length === 0}
-        <span class="text-muted">Loading...</span>
+        <span class="text-muted">{t("common.loading")}</span>
       {:else}
         {#each availableLanguages as lang}
           <label class="checkbox-label">
@@ -149,11 +160,13 @@
     </div>
   </div>
 
-  <button on:click={clearFilters} class="btn-secondary">Clear</button>
+  <button on:click={clearFilters} class="btn-secondary"
+    >{t("common.filter")}</button
+  >
 </div>
 
 {#if loading}
-  <Spinner centered size="lg">Loading forms...</Spinner>
+  <Spinner centered size="lg">{t("common.loading")}</Spinner>
 {:else if error}
   <div class="alert alert-error">{error}</div>
 {:else if forms.length === 0}
@@ -181,10 +194,11 @@
       <thead>
         <tr>
           <th>Name</th>
-          <th>Version</th>
+          <th>SurveyJS Version</th>
           <th>Languages</th>
           <th>Versions</th>
           <th>Created</th>
+          <th>Last Update</th>
           <th class="actions-header">Actions</th>
         </tr>
       </thead>
@@ -208,8 +222,13 @@
               </div>
             </td>
             <td><span class="count-badge">{form.version_count || 0}</span></td>
-            <td class="text-muted"
-              >{new Date(form.created).toLocaleDateString()}</td
+            <td class="text-muted" title={formatDateTime(form.created, "cs")}
+              >{timeAgo(form.created, "cs")}</td
+            >
+            <td
+              class="text-muted"
+              title={formatDateTime(form.last_update, "cs")}
+              >{timeAgo(form.last_update, "cs")}</td
             >
             <td class="actions">
               <a
@@ -223,20 +242,6 @@
                     stroke-linejoin="round"
                     stroke-width="2"
                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-              </a>
-              <a
-                href="/admin/form-versions?form_id={form.form_id}"
-                class="btn-icon"
-                title="Versions"
-              >
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
                   />
                 </svg>
               </a>
