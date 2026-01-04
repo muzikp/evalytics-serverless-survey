@@ -3,7 +3,13 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { auth } from "$lib/auth.js";
-  import { getForms, getForm, createCampaign, getCampaign, updateCampaign } from "$lib/api.js";
+  import {
+    getForms,
+    getForm,
+    createCampaign,
+    getCampaign,
+    updateCampaign,
+  } from "$lib/api.js";
   import Spinner from "$lib/components/Spinner.svelte";
   import ConfigureRespondentFieldsDialog from "$lib/components/ConfigureRespondentFieldsDialog.svelte";
   import { translations_store } from "$lib/i18n/index.js";
@@ -11,7 +17,7 @@
 
   $: t = $translations_store;
   $: campaignId = $page.params.id;
-  $: isNewCampaign = campaignId === 'new';
+  $: isNewCampaign = campaignId === "new";
   $: pageTitle = isNewCampaign ? "Create Campaign" : "Edit Campaign";
 
   let campaign = {
@@ -65,8 +71,8 @@
   });
 
   function generateCampaignId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let id = '';
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let id = "";
     for (let i = 0; i < 16; i++) {
       id += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -78,47 +84,53 @@
     error = "";
     try {
       const data = await getCampaign(campaignId);
-      
+
       // Extract title - can be string or object
       let title = data.title;
-      if (typeof title === 'object' && title) {
-        title = title.en || title.cs || Object.values(title)[0] || '';
+      if (typeof title === "object" && title) {
+        title = title.en || title.cs || Object.values(title)[0] || "";
       }
-      
+
       // Extract description
-      let description = data.description || '';
-      if (typeof description === 'object' && description) {
-        description = description.en || description.cs || Object.values(description)[0] || '';
+      let description = data.description || "";
+      if (typeof description === "object" && description) {
+        description =
+          description.en ||
+          description.cs ||
+          Object.values(description)[0] ||
+          "";
       }
-      
+
       // Extract email template
-      let emailTemplate = data.email_template || '';
-      if (typeof emailTemplate === 'object' && emailTemplate) {
+      let emailTemplate = data.email_template || "";
+      if (typeof emailTemplate === "object" && emailTemplate) {
         if (emailTemplate.invite && emailTemplate.invite.html) {
           emailTemplate = emailTemplate.invite.html;
         } else {
           emailTemplate = JSON.stringify(emailTemplate, null, 2);
         }
       }
-      
+
       campaign = {
         name: title,
-        public_id: data.public_id || '',
+        public_id: data.public_id || "",
         description: description,
-        form_id: '', // Will be set from version_id lookup
+        form_id: "", // Will be set from version_id lookup
         version_id: data.version_id,
-        open_on: data.open_on ? data.open_on.split('T')[0] : '',
-        close_on: data.close_on ? data.close_on.split('T')[0] : '',
+        open_on: data.open_on ? data.open_on.split("T")[0] : "",
+        close_on: data.close_on ? data.close_on.split("T")[0] : "",
         is_public: Boolean(data.is_public),
         allow_retries: Boolean(data.allow_retries),
         email_template: emailTemplate,
       };
-      
+
       // Find form_id from versions
       if (data.version_id && forms.length > 0) {
         for (const form of forms) {
           const formData = await getForm(form.form_id);
-          const version = formData.versions?.find(v => v.version_id === data.version_id);
+          const version = formData.versions?.find(
+            (v) => v.version_id === data.version_id,
+          );
           if (version) {
             campaign.form_id = form.form_id;
             break;
@@ -139,33 +151,34 @@
     if (!campaign || !campaign.email_template) {
       return '<p style="color: #999; text-align: center; padding: 2rem;">Email template preview will appear here</p>';
     }
-    
+
     // Ensure all variables are available
-    const surveyId = campaign.public_id || generatedCampaignId || campaignId || 'campaign-id';
-    
+    const surveyId =
+      campaign.public_id || generatedCampaignId || campaignId || "campaign-id";
+
     let html = campaign.email_template;
-    
+
     // Get first respondent data or use defaults
     const firstRespondent = respondents?.[0] || {};
     const placeholders = {
-      email: firstRespondent.email || 'user@example.com',
-      name: firstRespondent.name || 'John Doe',
+      email: firstRespondent.email || "user@example.com",
+      name: firstRespondent.name || "John Doe",
       link: `http://localhost:5173/survey/${surveyId}`,
-      campaign_name: campaign.name || 'Survey Campaign',
-      ...firstRespondent
+      campaign_name: campaign.name || "Survey Campaign",
+      ...firstRespondent,
     };
-    
+
     // Replace all __placeholder__ with values
-    Object.keys(placeholders).forEach(key => {
-      const regex = new RegExp(`__${key}__`, 'g');
-      html = html.replace(regex, String(placeholders[key] || ''));
+    Object.keys(placeholders).forEach((key) => {
+      const regex = new RegExp(`__${key}__`, "g");
+      html = html.replace(regex, String(placeholders[key] || ""));
     });
-    
+
     // Replace any remaining __...__ placeholders with a placeholder text
     html = html.replace(/__([^_]+)__/g, (match, key) => {
       return `<span style="background: #ffc; padding: 2px 4px; border-radius: 2px;">${match}</span>`;
     });
-    
+
     return html;
   })();
 
@@ -281,7 +294,7 @@
         await updateCampaign(campaignId, campaignData);
         toast.success("Campaign updated successfully");
       }
-      
+
       goto("/admin/campaigns");
     } catch (err) {
       error = err.message;
@@ -447,7 +460,8 @@
 </html>"
               ></textarea>
               <small style="color: #666; margin-top: 0.5rem; display: block;">
-                Available placeholders: __email__, __name__, __link__, __campaign_name__, and any custom respondent fields
+                Available placeholders: __email__, __name__, __link__,
+                __campaign_name__, and any custom respondent fields
               </small>
             </div>
             <div class="email-editor-right">
@@ -471,14 +485,21 @@
 
       <div class="form-group">
         <label for="form">Form *</label>
-        <select id="form" bind:value={campaign.form_id} required disabled={!isNewCampaign}>
+        <select
+          id="form"
+          bind:value={campaign.form_id}
+          required
+          disabled={!isNewCampaign}
+        >
           <option value="">Select a form...</option>
           {#each forms as form}
             <option value={form.form_id}>{form.name}</option>
           {/each}
         </select>
         {#if !isNewCampaign}
-          <small style="color: #999;">Form cannot be changed after creation</small>
+          <small style="color: #999;"
+            >Form cannot be changed after creation</small
+          >
         {/if}
       </div>
 
@@ -834,7 +855,7 @@
 
   .email-editor-left textarea {
     flex: 1;
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
     font-size: 0.9rem;
     padding: 1rem;
     border: 1px solid var(--color-border);

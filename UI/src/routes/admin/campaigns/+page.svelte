@@ -42,30 +42,42 @@
   }
 
   function getTitle(campaign) {
-    if (typeof campaign.title === 'string') {
+    if (typeof campaign.title === "string") {
       return campaign.title;
     }
     // If title is an object (multi-language), get first available language
-    if (typeof campaign.title === 'object' && campaign.title) {
-      return campaign.title.en || campaign.title.cs || Object.values(campaign.title)[0] || 'Untitled';
+    if (typeof campaign.title === "object" && campaign.title) {
+      return (
+        campaign.title.en ||
+        campaign.title.cs ||
+        Object.values(campaign.title)[0] ||
+        "Untitled"
+      );
     }
-    return 'Untitled';
+    return "Untitled";
   }
 
   function getDescription(campaign) {
-    if (typeof campaign.description === 'string') {
+    if (typeof campaign.description === "string") {
       return campaign.description;
     }
-    if (typeof campaign.description === 'object' && campaign.description) {
-      return campaign.description.en || campaign.description.cs || Object.values(campaign.description)[0] || '';
+    if (typeof campaign.description === "object" && campaign.description) {
+      return (
+        campaign.description.en ||
+        campaign.description.cs ||
+        Object.values(campaign.description)[0] ||
+        ""
+      );
     }
-    return '';
+    return "";
   }
 
   async function handleDelete(campaign) {
     const title = getTitle(campaign);
-    const confirmed = confirm(`Are you sure you want to delete campaign "${title}"?\n\nThis action cannot be undone.`);
-    
+    const confirmed = confirm(
+      `Are you sure you want to delete campaign "${title}"?\n\nThis action cannot be undone.`,
+    );
+
     if (!confirmed) return;
 
     deleting = campaign.campaign_id;
@@ -105,35 +117,42 @@
         <div class="campaign-header">
           <h3>{getTitle(campaign)}</h3>
           <span class="badge {campaign.is_public ? 'public' : 'private'}">
-            {campaign.is_public ? '🌐 Public' : '🔒 Private'}
+            {campaign.is_public ? "🌐 Public" : "🔒 Private"}
           </span>
         </div>
         {#if getDescription(campaign)}
-          <button 
-            class="btn-danger btn-sm" 
+          <button
+            class="btn-danger btn-sm"
             on:click={() => handleDelete(campaign)}
             disabled={deleting === campaign.campaign_id}
           >
-            {deleting === campaign.campaign_id ? 'Deleting...' : 'Delete'}
+            {deleting === campaign.campaign_id ? "Deleting..." : "Delete"}
           </button>
           <p class="description">{getDescription(campaign)}</p>
         {/if}
         <div class="campaign-meta">
           <div class="meta-item">
-            <strong>Form:</strong> {campaign.form_name || 'Unknown'}
+            <strong>Form:</strong>
+            {campaign.form_name || "Unknown"}
           </div>
           <div class="meta-item">
-            <strong>Version:</strong> {campaign.form_version || 'N/A'}
+            <strong>Version:</strong>
+            {campaign.form_version || "N/A"}
           </div>
           <div class="meta-item">
-            <strong>Opens:</strong> {formatDate(campaign.open_on)}
+            <strong>Opens:</strong>
+            {formatDate(campaign.open_on)}
           </div>
           <div class="meta-item">
-            <strong>Closes:</strong> {formatDate(campaign.close_on)}
+            <strong>Closes:</strong>
+            {formatDate(campaign.close_on)}
           </div>
         </div>
         <div class="campaign-actions">
-          <a href="/admin/campaigns/{campaign.campaign_id}" class="btn-primary btn-sm">Open</a>
+          <a
+            href="/admin/campaigns/{campaign.campaign_id}"
+            class="btn-primary btn-sm">Open</a
+          >
         </div>
       </div>
     {/each}

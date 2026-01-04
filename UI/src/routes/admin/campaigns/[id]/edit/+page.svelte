@@ -62,22 +62,26 @@
     error = "";
     try {
       const data = await getCampaign(campaignId);
-      
+
       // Extract title - can be string or object
       let title = data.title;
-      if (typeof title === 'object' && title) {
-        title = title.en || title.cs || Object.values(title)[0] || '';
+      if (typeof title === "object" && title) {
+        title = title.en || title.cs || Object.values(title)[0] || "";
       }
-      
+
       // Extract description
-      let description = data.description || '';
-      if (typeof description === 'object' && description) {
-        description = description.en || description.cs || Object.values(description)[0] || '';
+      let description = data.description || "";
+      if (typeof description === "object" && description) {
+        description =
+          description.en ||
+          description.cs ||
+          Object.values(description)[0] ||
+          "";
       }
-      
+
       // Extract email template
-      let emailTemplate = data.email_template || '';
-      if (typeof emailTemplate === 'object' && emailTemplate) {
+      let emailTemplate = data.email_template || "";
+      if (typeof emailTemplate === "object" && emailTemplate) {
         // Handle nested structure like {invite: {html: "...", subject: "..."}}
         if (emailTemplate.invite && emailTemplate.invite.html) {
           emailTemplate = emailTemplate.invite.html;
@@ -85,25 +89,27 @@
           emailTemplate = JSON.stringify(emailTemplate, null, 2);
         }
       }
-      
+
       campaign = {
         name: title,
-        public_id: data.public_id || '',
+        public_id: data.public_id || "",
         description: description,
-        form_id: '', // Will be set from version_id lookup
+        form_id: "", // Will be set from version_id lookup
         version_id: data.version_id,
-        open_on: data.open_on ? data.open_on.split('T')[0] : '',
-        close_on: data.close_on ? data.close_on.split('T')[0] : '',
+        open_on: data.open_on ? data.open_on.split("T")[0] : "",
+        close_on: data.close_on ? data.close_on.split("T")[0] : "",
         is_public: Boolean(data.is_public),
         allow_retries: Boolean(data.allow_retries),
         email_template: emailTemplate,
       };
-      
+
       // Find form_id from versions
       if (data.version_id && forms.length > 0) {
         for (const form of forms) {
           const formData = await getForm(form.form_id);
-          const version = formData.versions?.find(v => v.version_id === data.version_id);
+          const version = formData.versions?.find(
+            (v) => v.version_id === data.version_id,
+          );
           if (version) {
             campaign.form_id = form.form_id;
             break;
@@ -145,8 +151,8 @@
 
   function handleAddRespondentRow() {
     const newRow = {};
-    respondentFields.forEach(field => {
-      newRow[field.name] = '';
+    respondentFields.forEach((field) => {
+      newRow[field.name] = "";
     });
     respondents = [...respondents, newRow];
   }
@@ -159,22 +165,22 @@
     if (field.required && !value) {
       return false;
     }
-    
+
     if (!value) return true;
-    
+
     switch (field.type) {
-      case 'email':
+      case "email":
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-      case 'number':
-        return !isNaN(value) && value.trim() !== '';
-      case 'url':
+      case "number":
+        return !isNaN(value) && value.trim() !== "";
+      case "url":
         try {
           new URL(value);
           return true;
         } catch {
           return false;
         }
-      case 'tel':
+      case "tel":
         return /^[+]?[\d\s()-]+$/.test(value);
       default:
         return true;
@@ -292,7 +298,9 @@
           bind:value={campaign.public_id}
           placeholder="e.g., customer-feedback-2026"
         />
-        <small>URL-friendly identifier (if empty, campaign ID will be used)</small>
+        <small
+          >URL-friendly identifier (if empty, campaign ID will be used)</small
+        >
       </div>
 
       <div class="form-group">
@@ -322,7 +330,9 @@
           <option value="">Select version</option>
           {#each formVersions as version}
             <option value={version.version_id}>
-              v{version.version} - {new Date(version.created).toLocaleDateString()}
+              v{version.version} - {new Date(
+                version.created,
+              ).toLocaleDateString()}
             </option>
           {/each}
         </select>
@@ -337,7 +347,11 @@
           placeholder="<h1>Hello!</h1><p>You are invited to complete our survey...</p>"
           rows="8"
         ></textarea>
-        <small>HTML template for invitation emails. Use &#123;&#123;link&#125;&#125;, &#123;&#123;name&#125;&#125;, etc. as placeholders</small>
+        <small
+          >HTML template for invitation emails. Use
+          &#123;&#123;link&#125;&#125;, &#123;&#123;name&#125;&#125;, etc. as
+          placeholders</small
+        >
       </div>
 
       <div class="form-row">
@@ -383,9 +397,7 @@
             >
               ⚙️ Configure Fields
             </button>
-            <button class="btn-primary" disabled>
-              📥 Import
-            </button>
+            <button class="btn-primary" disabled> 📥 Import </button>
             <button
               class="btn-primary"
               on:click={handleAddRespondentRow}
@@ -396,13 +408,19 @@
           </div>
         </div>
 
-        <small style="color: var(--color-text-secondary); margin-bottom: 1rem; display: block;">
-          Note: Respondent management is view-only in edit mode. Use the campaign detail page to manage respondents.
+        <small
+          style="color: var(--color-text-secondary); margin-bottom: 1rem; display: block;"
+        >
+          Note: Respondent management is view-only in edit mode. Use the
+          campaign detail page to manage respondents.
         </small>
 
         {#if respondentFields.length === 0}
           <div class="empty-state">
-            <p>Click "Configure Fields" to define the structure of the respondent table</p>
+            <p>
+              Click "Configure Fields" to define the structure of the respondent
+              table
+            </p>
           </div>
         {:else}
           <div class="respondents-table">
@@ -431,7 +449,10 @@
                           placeholder={field.label}
                           required={field.required}
                           readonly={field.readonly}
-                          class:invalid={!validateRespondentField(respondent[field.name], field)}
+                          class:invalid={!validateRespondentField(
+                            respondent[field.name],
+                            field,
+                          )}
                         />
                       </td>
                     {/each}
@@ -448,10 +469,13 @@
                 {/each}
               </tbody>
             </table>
-            
+
             {#if respondents.length === 0}
               <div class="empty-state">
-                <p>No respondents yet. Click "Add Row" or "Import" to add respondents.</p>
+                <p>
+                  No respondents yet. Click "Add Row" or "Import" to add
+                  respondents.
+                </p>
               </div>
             {/if}
           </div>
