@@ -1,13 +1,25 @@
-<h1>Evalytics Serverless Survey</h1>
+<script>
+  import { auth } from "$lib/auth.js";
+  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
 
-<p>
-	Tahle UI část je SvelteKit (adapter-static) a je připravená pro deploy na GitHub Pages.
-	Zatím je to jen skeleton – admin část i respondentská část se budou doplňovat.
-</p>
+  onMount(() => {
+    if ($auth) {
+      goto("/admin/templates");
+    } else {
+      goto("/login");
+    }
+  });
+</script>
 
-<h2>Další kroky</h2>
-<ol>
-	<li>Napojit admin login (JWT) a admin API.</li>
-	<li>Napojit zobrazení dotazníku (SurveyJS runtime) v respondentské části.</li>
-	<li>Přidat design systém (např. Skeleton/Tailwind) a i18n.</li>
-</ol>
+<div class="welcome">
+  <h1>Evalytics Serverless Survey</h1>
+  <p>Loading...</p>
+</div>
+
+<style>
+  .welcome {
+    text-align: center;
+    padding: 60px 20px;
+  }
+</style>

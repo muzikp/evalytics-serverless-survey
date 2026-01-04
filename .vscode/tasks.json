@@ -2,6 +2,80 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "🚀 Start Dev (API + UI)",
+      "dependsOn": [
+        "cleanup-processes",
+        "start-api",
+        "start-ui"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "cleanup-processes",
+      "type": "shell",
+      "command": "Get-Process -Name python,sam,node -ErrorAction SilentlyContinue | Where-Object {$_.Path -like '*evalytics*' -or $_.CommandLine -like '*vite*'} | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Host '✓ Cleaned up old processes' -ForegroundColor Green",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "start-api",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/API; sam build; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🚀 API Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://127.0.0.1:3000' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; sam local start-api --port 3000 --template .aws-sam/build/template.yaml --docker-network host",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building.*$",
+          "endsPattern": "^.*Running on.*$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "start-ui",
+      "type": "shell",
+      "command": "Start-Sleep -Seconds 3; cd ${workspaceFolder}/UI; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🎨 UI Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://localhost:5173' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; npm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*VITE.*$",
+          "endsPattern": "^.*Local:.*$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "⛔ Stop Dev Servers",
+      "type": "shell",
+      "command": "Get-Process -Name python,sam,node -ErrorAction SilentlyContinue | Where-Object {$_.Path -like '*evalytics*' -or $_.CommandLine -like '*vite*' -or $_.CommandLine -like '*sam*'} | Stop-Process -Force; Write-Host '✓ Stopped all dev servers' -ForegroundColor Red",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
       "label": "Dev: API (SAM local)",
       "type": "shell",
       "command": "npm run sam:local",

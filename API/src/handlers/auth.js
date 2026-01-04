@@ -2,6 +2,7 @@
 import { queryOne, query } from '../db.js';
 import { apiResponse, errorResponse, parseBody, hashValue, generateToken, generateId, formatDateTime } from '../utils.js';
 import { generateJWT, authenticate, hasRole } from '../auth.js';
+import { logError, logInfo } from '../logger.js';
 import bcrypt from 'bcryptjs';
 
 /**
@@ -41,44 +42,66 @@ export async function handleAuth(event, method, path, authToken) {
  * POST /auth - Login
  */
 async function login(event) {
-  const body = parseBody(event);
-  const { email, password } = body;
+  const method = event.requestContext?.http?.method || event.httpMethod || 'POST';
+  const path = event.requestContext?.http?.path || event.path || '/auth';
+  
+  try {
+    logInfo('Login attempt starting', { endpoint: `${method} ${path}` });
+    const body = parseBody(event);
+    const { email, password } = body;
 
-  if (!email || !password) {
-    return errorResponse(400, 'MISSING_FIELDS', 'Email and password are required');
-  }
-
-  // Find user
-  const user = await queryOne(
-    'SELECT * FROM users WHERE email = ?',
-    [email]
-  );
-
-  if (!user) {
-    return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
-  }
-
-  // Verify password
-  const isValid = await bcrypt.compare(password, user.password_hash);
-  if (!isValid) {
-    return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
-  }
-
-  // Generate JWT
-  const token = generateJWT(user);
-
-  return apiResponse(200, {
-    token,
-    token_type: 'Bearer',
-    expires_in: 3600,
-    user: {
-      user_id: user.user_id,
-      email: user.email,
-      firstname: user.firstname,
-      lastname: user.lastname,
-      roles: typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles
+    if (!email || !password) {
+      logInfo('Login failed: missing email or password');
+      return errorResponse(400, 'MISSING_FIELDS', 'Email and password are required');
     }
-  });
+
+    // Find user
+    logInfo('Searching for user in database', { email });
+    const user = await queryOne(
+      'SELECT * FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (!user) {
+      logInfo('Login failed: user not found', { email });
+      return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    }
+
+    logInfo('User found', { userId: user.user_id, email: user.email });
+
+    // Verify password
+    logInfo('Verifying password');
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) {
+      logInfo('Login failed: invalid password', { email });
+      return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    }
+
+    // Generate JWT
+    logInfo('Generating JWT token');
+    const token = generateJWT(user);
+    logInfo('Login successful', { userId: user.user_id, email: user.email });
+
+    return apiResponse(200, {
+      token,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      user: {
+        user_id: user.user_id,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        roles: typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles
+      }
+    });
+  } catch (error) {
+    logError('Login error', error, {
+      method,
+      path,
+      body: parseBody(event)
+    });
+    return errorResponse(500, 'INTERNAL_ERROR', `Login failed: ${error.message}`);
+  }
 }
 
 /**

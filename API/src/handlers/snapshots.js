@@ -40,44 +40,110 @@ async function listSnapshots(event, user) {
   const params = event.queryStringParameters || {};
   const limit = parseInt(params.limit || '50');
   const offset = parseInt(params.offset || '0');
-  const templateId = params.template_id;
+  
+  const {
+    id,                    // snapshot_id exact match
+    template_id,           // template_id exact match
+    version,               // version number exact match
+    locked,                // locked status (true/false)
+    surveyjs_version,      // exact match
+    languages,             // JSON array contains check
+    created_by,            // exact match
+    last_modified_by,      // exact match
+    created_from,          // created >= this timestamp
+    created_to,            // created <= this timestamp
+    updated_from,          // last_update >= this timestamp
+    updated_to             // last_update <= this timestamp
+  } = params;
+
+  let whereClauses = [];
+  let queryParams = [];
+
+  if (id) {
+    whereClauses.push('s.snapshot_id = ?');
+    queryParams.push(id);
+  }
+
+  if (template_id) {
+    whereClauses.push('s.template_id = ?');
+    queryParams.push(template_id);
+  }
+
+  if (version) {
+    whereClauses.push('s.version = ?');
+    queryParams.push(parseInt(version));
+  }
+
+  if (locked !== undefined) {
+    whereClauses.push('s.locked = ?');
+    queryParams.push(locked === 'true' || locked === '1' ? 1 : 0);
+  }
+
+  if (surveyjs_version) {
+    whereClauses.push('s.surveyjs_version = ?');
+    queryParams.push(surveyjs_version);
+  }
+
+  if (languages) {
+    whereClauses.push('JSON_CONTAINS(s.languages, JSON_QUOTE(?), "$")');
+    queryParams.push(languages);
+  }
+
+  if (created_by) {
+    whereClauses.push('s.created_by = ?');
+    queryParams.push(created_by);
+  }
+
+  if (last_modified_by) {
+    whereClauses.push('s.last_modified_by = ?');
+    queryParams.push(last_modified_by);
+  }
+
+  if (created_from) {
+    whereClauses.push('s.created >= ?');
+    queryParams.push(created_from);
+  }
+
+  if (created_to) {
+    whereClauses.push('s.created <= ?');
+    queryParams.push(created_to);
+  }
+
+  if (updated_from) {
+    whereClauses.push('s.last_update >= ?');
+    queryParams.push(updated_from);
+  }
+
+  if (updated_to) {
+    whereClauses.push('s.last_update <= ?');
+    queryParams.push(updated_to);
+  }
+
+  const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
   let sql = `
-    SELECT s.*, t.name as template_name,
-           u1.firstname as created_by_firstname, u1.lastname as created_by_lastname,
-           u2.firstname as modified_by_firstname, u2.lastname as modified_by_lastname
+    SELECT s.snapshot_id, s.template_id, s.version, s.surveyjs_version,
+           s.languages, s.created, s.last_update, s.created_by, s.last_modified_by,
+           t.name as template_name
     FROM snapshots s
     LEFT JOIN templates t ON s.template_id = t.template_id
-    LEFT JOIN users u1 ON s.created_by = u1.user_id
-    LEFT JOIN users u2 ON s.last_modified_by = u2.user_id
+    ${whereClause}
   `;
-  const sqlParams = [];
-
-  if (templateId) {
-    sql += ' WHERE s.template_id = ?';
-    sqlParams.push(templateId);
-  }
 
   // Note: LIMIT and OFFSET must be directly interpolated (not as params) due to MySQL2 driver limitations
   sql += ` ORDER BY s.created DESC LIMIT ${limit} OFFSET ${offset}`;
 
-  const snapshots = await query(sql, sqlParams);
+  const snapshots = await query(sql, queryParams);
 
-  // Get total count
-  let countSql = 'SELECT COUNT(*) as total FROM snapshots';
-  const countParams = [];
-  if (templateId) {
-    countSql += ' WHERE template_id = ?';
-    countParams.push(templateId);
-  }
-  const countResult = await query(countSql, countParams);
+  // Get total count with same filters
+  let countSql = `SELECT COUNT(*) as total FROM snapshots s ${whereClause}`;
+  const countResult = await query(countSql, queryParams);
   const total = countResult[0].total;
 
   return apiResponse(200, {
     items: snapshots.map(s => ({
       ...s,
-      languages: typeof s.languages === 'string' ? JSON.parse(s.languages) : s.languages,
-      data: typeof s.data === 'string' ? JSON.parse(s.data) : s.data
+      languages: typeof s.languages === 'string' ? JSON.parse(s.languages) : s.languages
     })),
     page: {
       limit,
@@ -150,13 +216,11 @@ async function createSnapshot(event, user) {
 
 async function getSnapshot(snapshotId) {
   const snapshot = await queryOne(
-    `SELECT s.*, t.name as template_name,
-            u1.firstname as created_by_firstname, u1.lastname as created_by_lastname,
-            u2.firstname as modified_by_firstname, u2.lastname as modified_by_lastname
+    `SELECT s.snapshot_id, s.template_id, s.version, s.surveyjs_version,
+            s.languages, s.data, s.created, s.last_update, s.created_by, s.last_modified_by,
+            t.name as template_name
      FROM snapshots s
      LEFT JOIN templates t ON s.template_id = t.template_id
-     LEFT JOIN users u1 ON s.created_by = u1.user_id
-     LEFT JOIN users u2 ON s.last_modified_by = u2.user_id
      WHERE s.snapshot_id = ?`,
     [snapshotId]
   );

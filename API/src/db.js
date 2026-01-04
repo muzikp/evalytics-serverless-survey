@@ -1,5 +1,6 @@
 // Database connection and utilities
 import mysql from 'mysql2/promise';
+import { logQuery, logError, isDev } from './logger.js';
 
 let pool = null;
 
@@ -32,9 +33,18 @@ export function getPool() {
  * @returns {Promise<any>}
  */
 export async function query(sql, params = []) {
-  const pool = getPool();
-  const [rows] = await pool.execute(sql, params);
-  return rows;
+  try {
+    logQuery(sql, params);
+    const pool = getPool();
+    const [rows] = await pool.execute(sql, params);
+    return rows;
+  } catch (error) {
+    logError('Database query error', error, {
+      sql,
+      params: isDev() ? params : '[hidden]'
+    });
+    throw error;
+  }
 }
 
 /**

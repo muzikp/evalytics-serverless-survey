@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "sam local start-api --warm-containers EAGER",
     "build": "echo \"API build: (no-op)\" && exit 0",
+    "prebuild": "node prebuild.mjs",
     "test": "echo \"TODO: unit tests\" && exit 0",
     "lint": "echo \"TODO: eslint\" && exit 0",
     "sam:validate": "sam validate",
@@ -16,5 +17,8 @@
     "mysql2": "^3.11.5",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "yaml": "^2.3.4"
   }
 }

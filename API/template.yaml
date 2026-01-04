@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Evalytics Serverless Survey API (SAM)
 
@@ -50,6 +50,19 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /{proxy+}
             Method: ANY
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: GET
+    Metadata:
+      BuildMethod: nodejs20.x
+      BuildProperties:
+        # Include docs directory for OpenAPI spec
+        SourceFiles:
+          - src/**/*
+          - docs/**/*
 
   EmailQueue:
     Type: AWS::SQS::Queue
@@ -69,7 +82,6 @@ Resources:
             Queue: !GetAtt EmailQueue.Arn
             BatchSize: 5
 
-
   SesEventsTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -86,7 +98,7 @@ Resources:
       Queues:
         - !Ref SesEventsQueue
       PolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:

@@ -1,0 +1,17 @@
+{
+  "ApiFunction": {
+    "APP_ENV": "local",
+    "NODE_ENV": "development",
+    "DB_HOST": "host.docker.internal",
+    "DB_PORT": "3306",
+    "DB_USER": "vcagent",
+    "DB_PASSWORD": "HUIEwhmeAk9I7k7b_Wg8T",
+    "DB_NAME": "evalytics_survey",
+    "JWT_SECRET": "c6d3f1348ae3f27c12c14b3e3065fc5d",
+    "JWT_EXPIRATION": "1h",
+    "SES_FROM": "info@evalytics.cz",
+    "PUBLIC_BASE_URL": "http://localhost:5173",
+    "AWS_REGION": "eu-central-1"
+  }
+}
+
