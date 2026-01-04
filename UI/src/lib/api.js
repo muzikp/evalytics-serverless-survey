@@ -142,3 +142,53 @@ export async function updateFormVersion(id, data) {
 export async function deleteFormVersion(id) {
 	return apiDelete(`/form-versions/${id}`);
 }
+
+// Campaigns API
+export async function getCampaigns(filters = {}) {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== '') {
+			params.append(key, value);
+		}
+	});
+	const query = params.toString();
+	return apiGetJson(`/campaigns${query ? '?' + query : ''}`);
+}
+
+export async function getCampaign(id) {
+	return apiGetJson(`/campaigns/${id}`);
+}
+
+export async function createCampaign(data) {
+	return apiPost('/campaigns', data);
+}
+
+export async function updateCampaign(id, data) {
+	return apiRequest('PUT', `/campaigns/${id}`, data);
+}
+
+export async function deleteCampaign(id) {
+	return apiDelete(`/campaigns/${id}`);
+}
+
+// Campaign Respondents API
+export async function getCampaignRespondents(campaignId) {
+	return apiGetJson(`/campaigns/${campaignId}/respondents`);
+}
+
+export async function addCampaignRespondent(campaignId, data) {
+	return apiPost(`/campaigns/${campaignId}/respondents`, data);
+}
+
+export async function addCampaignRespondents(campaignId, respondents) {
+	return apiPost(`/campaigns/${campaignId}/respondents/batch`, { respondents });
+}
+
+export async function deleteCampaignRespondent(campaignId, respondentId) {
+	return apiDelete(`/campaigns/${campaignId}/respondents/${respondentId}`);
+}
+
+// Email Blacklist API
+export async function checkEmailBlacklist(email) {
+	return apiGetJson(`/blacklist/${encodeURIComponent(email)}`);
+}

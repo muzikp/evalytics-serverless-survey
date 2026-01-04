@@ -60,11 +60,11 @@ async function listCampaigns(event, user) {
 
   // Note: LIMIT and OFFSET must be directly interpolated (not as params) due to MySQL2 driver limitations
   const campaigns = await query(
-    `SELECT c.*, s.version as snapshot_version, t.name as template_name,
+    `SELECT c.*, fv.version as form_version, f.name as form_name,
             u1.firstname as created_by_firstname, u1.lastname as created_by_lastname
      FROM campaigns c
-     LEFT JOIN snapshots s ON c.snapshot_id = s.snapshot_id
-     LEFT JOIN templates t ON s.template_id = t.template_id
+     LEFT JOIN form_versions fv ON c.version_id = fv.version_id
+     LEFT JOIN forms f ON fv.form_id = f.form_id
      LEFT JOIN users u1 ON c.created_by = u1.user_id
      ORDER BY c.created DESC LIMIT ${limit} OFFSET ${offset}`
   );
@@ -73,48 +73,81 @@ async function listCampaigns(event, user) {
   const total = countResult[0].total;
 
   return apiResponse(200, {
-    items: campaigns.map(c => ({
-      ...c,
-      title: typeof c.title === 'string' ? JSON.parse(c.title) : c.title,
-      description: c.description ? (typeof c.description === 'string' ? JSON.parse(c.description) : c.description) : null,
-      email_template: typeof c.email_template === 'string' ? JSON.parse(c.email_template) : c.email_template
-    })),
+    items: campaigns.map(c => {
+      // Parse JSON fields - they may already be parsed or need parsing
+      let title = c.title;
+      let description = c.description;
+      let email_template = c.email_template;
+      
+      try {
+        if (typeof title === 'string') {
+          title = JSON.parse(title);
+        }
+      } catch (e) {
+        // If parse fails, use as-is (might already be a plain string)
+      }
+      
+      try {
+        if (description && typeof description === 'string') {
+          description = JSON.parse(description);
+        }
+      } catch (e) {
+        // If parse fails, use as-is
+      }
+      
+      try {
+        if (email_template && typeof email_template === 'string') {
+          email_template = JSON.parse(email_template);
+        }
+      } catch (e) {
+        // If parse fails, use as-is
+      }
+      
+      return {
+        ...c,
+        title,
+        description,
+        email_template
+      };
+    }),
     page: { limit, offset, total }
   });
 }
 
 async function createCampaign(event, user) {
   const body = parseBody(event);
-  const { snapshot_id, title, description, email_template, open_on, close_on, allow_multiple_responses, max_attempts } = body;
+  const { campaign_id, version_id, public_id, title, description, email_template, open_on, close_on, is_public, allow_retries, allow_multiple_responses, respondents } = body;
 
-  if (!snapshot_id || !title || !email_template) {
-    return errorResponse(400, 'MISSING_FIELDS', 'snapshot_id, title, and email_template are required');
+  if (!version_id || !title) {
+    return errorResponse(400, 'MISSING_FIELDS', 'version_id and title are required');
   }
 
-  // Verify snapshot exists
-  const snapshot = await queryOne('SELECT snapshot_id FROM snapshots WHERE snapshot_id = ?', [snapshot_id]);
-  if (!snapshot) {
-    return errorResponse(404, 'NOT_FOUND', 'Snapshot not found');
+  // Verify form version exists
+  const version = await queryOne('SELECT version_id FROM form_versions WHERE version_id = ?', [version_id]);
+  if (!version) {
+    return errorResponse(404, 'NOT_FOUND', 'Form version not found');
   }
 
-  const campaignId = generateId(16);
-  const publicId = generateToken(32);
+  // Use provided campaign_id or generate new one
+  const campaignId = campaign_id || generateId(16);
+  const finalPublicId = public_id || generateToken(32);
   const now = formatDateTime();
 
   await query(
-    `INSERT INTO campaigns (campaign_id, snapshot_id, public_id, title, description, email_template, open_on, close_on, allow_multiple_responses, max_attempts, created, last_update, created_by, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO campaigns (campaign_id, version_id, public_id, title, description, email_template, open_on, close_on, is_public, allow_retries, allow_multiple_responses, created, last_update, created_by, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       campaignId,
-      snapshot_id,
-      publicId,
+      version_id,
+      finalPublicId,
       JSON.stringify(title),
       description ? JSON.stringify(description) : null,
-      JSON.stringify(email_template),
+      email_template ? JSON.stringify(email_template) : null,
       open_on || null,
       close_on || null,
-      allow_multiple_responses || false,
-      max_attempts || null,
+      is_public || 0,
+      allow_retries !== undefined ? allow_retries : 1,
+      allow_multiple_responses || 0,
       now,
       now,
       user.user_id,
@@ -122,16 +155,50 @@ async function createCampaign(event, user) {
     ]
   );
 
+  // If respondents provided, insert them
+  if (respondents && Array.isArray(respondents) && respondents.length > 0) {
+    const crypto = await import('crypto');
+    for (const resp of respondents) {
+      const respondentId = generateId(32);
+      const token = resp.token || generateToken(64);
+      const emailHash = crypto.createHash('sha256').update(resp.email).digest('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      
+      // Extract custom fields (all fields except email and token)
+      const customData = {};
+      Object.keys(resp).forEach(key => {
+        if (key !== 'email' && key !== 'token') {
+          customData[key] = resp[key];
+        }
+      });
+      
+      await query(
+        `INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          respondentId,
+          campaignId,
+          resp.email,
+          emailHash,
+          tokenHash,
+          Object.keys(customData).length > 0 ? JSON.stringify(customData) : null,
+          now,
+          now
+        ]
+      );
+    }
+  }
+
   return await getCampaign(campaignId);
 }
 
 async function getCampaign(campaignId) {
   const campaign = await queryOne(
-    `SELECT c.*, s.version as snapshot_version, s.data as snapshot_data, t.name as template_name,
+    `SELECT c.*, fv.version as form_version, fv.data as form_data, f.name as form_name,
             u1.firstname as created_by_firstname, u1.lastname as created_by_lastname
      FROM campaigns c
-     LEFT JOIN snapshots s ON c.snapshot_id = s.snapshot_id
-     LEFT JOIN templates t ON s.template_id = t.template_id
+     LEFT JOIN form_versions fv ON c.version_id = fv.version_id
+     LEFT JOIN forms f ON fv.form_id = f.form_id
      LEFT JOIN users u1 ON c.created_by = u1.user_id
      WHERE c.campaign_id = ?`,
     [campaignId]
@@ -141,12 +208,34 @@ async function getCampaign(campaignId) {
     return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
   }
 
+  // Parse JSON fields safely
+  let title = campaign.title;
+  let description = campaign.description;
+  let email_template = campaign.email_template;
+  let form_data = campaign.form_data;
+  
+  try {
+    if (typeof title === 'string') title = JSON.parse(title);
+  } catch (e) {}
+  
+  try {
+    if (description && typeof description === 'string') description = JSON.parse(description);
+  } catch (e) {}
+  
+  try {
+    if (email_template && typeof email_template === 'string') email_template = JSON.parse(email_template);
+  } catch (e) {}
+  
+  try {
+    if (form_data && typeof form_data === 'string') form_data = JSON.parse(form_data);
+  } catch (e) {}
+
   return apiResponse(200, {
     ...campaign,
-    title: typeof campaign.title === 'string' ? JSON.parse(campaign.title) : campaign.title,
-    description: campaign.description ? (typeof campaign.description === 'string' ? JSON.parse(campaign.description) : campaign.description) : null,
-    email_template: typeof campaign.email_template === 'string' ? JSON.parse(campaign.email_template) : campaign.email_template,
-    snapshot_data: campaign.snapshot_data ? (typeof campaign.snapshot_data === 'string' ? JSON.parse(campaign.snapshot_data) : campaign.snapshot_data) : null
+    title,
+    description,
+    email_template,
+    form_data
   });
 }
 
