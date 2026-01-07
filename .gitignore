@@ -31,3 +31,4 @@ samconfig.toml
 # Misc
 *.tmp
 *.log
+resources/
