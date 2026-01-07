@@ -1,0 +1,52 @@
+﻿{
+  "CallerReference": "evalytics-ui-'+(Get-Date -Format 'yyyyMMddHHmmss')+'",
+  "Comment": "Evalytics Survey UI",
+  "Enabled": true,
+  "DefaultRootObject": "index.html",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [{
+      "Id": "S3-evalytics-survey-ui-prod",
+      "DomainName": "evalytics-survey-ui-prod.s3.eu-central-1.amazonaws.com",
+      "S3OriginConfig": {
+        "OriginAccessIdentity": ""
+      },
+      "OriginAccessControlId": ""
+    }]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "S3-evalytics-survey-ui-prod",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"],
+      "CachedMethods": {
+        "Quantity": 2,
+        "Items": ["GET", "HEAD"]
+      }
+    },
+    "Compress": true,
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "MinTTL": 0
+  },
+  "CustomErrorResponses": {
+    "Quantity": 1,
+    "Items": [{
+      "ErrorCode": 404,
+      "ResponsePagePath": "/index.html",
+      "ResponseCode": "200",
+      "ErrorCachingMinTTL": 300
+    }]
+  },
+  "Aliases": {
+    "Quantity": 1,
+    "Items": ["survey.evalytics.cz"]
+  },
+  "ViewerCertificate": {
+    "ACMCertificateArn": "arn:aws:acm:us-east-1:959391504404:certificate/d5b1e100-478a-4088-bc69-a5da2d790e62",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+  "PriceClass": "PriceClass_100",
+  "HttpVersion": "http2"
+}

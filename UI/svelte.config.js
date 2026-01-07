@@ -5,11 +5,15 @@ const dev = process.env.NODE_ENV === 'development';
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
-		// Static export (GitHub Pages / static hosting)
+		// Static export (S3 + CloudFront hosting)
 		adapter: adapter({
-			// Required for GitHub Pages so that deep links work.
-			// GitHub Pages serves 404.html for unknown routes.
-			fallback: '404.html'
+			// Use index.html as fallback for SPA routing
+			// CloudFront will use this as default root object and for 404 errors
+			pages: 'build',
+			assets: 'build',
+			fallback: 'index.html',
+			precompress: false,
+			strict: false
 		}),
 		paths: {
 			// For GitHub Pages repositories (https://<user>.github.io/<repo>/)

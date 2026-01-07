@@ -85,7 +85,7 @@
     {
       "label": "🗄️ Init Database (Dev)",
       "type": "shell",
-      "command": "${workspaceFolder}/init-database.ps1",
+      "command": "${workspaceFolder}/scripts/init-database.ps1",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -96,7 +96,7 @@
     {
       "label": "🗄️ Init Database (Dev - Skip Demo)",
       "type": "shell",
-      "command": "${workspaceFolder}/init-database.ps1 -SkipDemoData",
+      "command": "${workspaceFolder}/scripts/init-database.ps1 -SkipDemoData",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -107,7 +107,7 @@
     {
       "label": "🗄️ Init Database (Prod - No Demo)",
       "type": "shell",
-      "command": "${workspaceFolder}/init-database.ps1 -Environment prod -SkipDemoData",
+      "command": "${workspaceFolder}/scripts/init-database.ps1 -Environment prod -SkipDemoData",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -122,7 +122,7 @@
     {
       "label": "🚢 Deploy ALL (UI + API)",
       "type": "shell",
-      "command": "${workspaceFolder}/deploy.ps1",
+      "command": "${workspaceFolder}/scripts/deploy.ps1",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -133,7 +133,7 @@
     {
       "label": "🚢 Deploy ALL (Custom Message)",
       "type": "shell",
-      "command": "$msg = Read-Host 'Commit message'; ${workspaceFolder}/deploy.ps1 -CommitMessage $msg",
+      "command": "$msg = Read-Host 'Commit message'; ${workspaceFolder}/scripts/deploy.ps1 -CommitMessage $msg",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -148,7 +148,7 @@
     {
       "label": "🎨 Deploy UI Only",
       "type": "shell",
-      "command": "${workspaceFolder}/deploy.ps1 -SkipAPI",
+      "command": "${workspaceFolder}/scripts/deploy.ps1 -SkipAPI",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -174,7 +174,7 @@
     {
       "label": "🚀 Deploy API Only",
       "type": "shell",
-      "command": "${workspaceFolder}/deploy.ps1 -SkipUI",
+      "command": "${workspaceFolder}/scripts/deploy.ps1 -SkipUI",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -291,6 +291,21 @@
         "reveal": "always",
         "panel": "dedicated",
         "group": "aws"
+      }
+    },
+    
+    // ==================================
+    // CLOUDFRONT SETUP
+    // ==================================
+    {
+      "label": "☁️ Setup CloudFront + S3",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/setup-cloudfront.ps1 -BucketName evalytics-survey-ui-prod -DomainName survey.evalytics.cz -Route53ZoneId Z05603941YHUGCR3H2VON",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "cloudfront"
       }
     },
     

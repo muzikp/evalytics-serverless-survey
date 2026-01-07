@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Evalytics Serverless Survey API (SAM)
+Description: Evalytics Serverless Survey API (SAM) - Updated 2026-01-07
 
 Parameters:
   DbHost:

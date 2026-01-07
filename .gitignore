@@ -32,3 +32,5 @@ samconfig.toml
 *.tmp
 *.log
 resources/
+scripts/*.json
+scripts/*.ps1

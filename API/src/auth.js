@@ -12,11 +12,12 @@ const JWT_EXPIRES_IN = '1h';
  * @returns {string}
  */
 export function generateJWT(user) {
+  const roles = typeof user.roles === 'string' ? JSON.parse(user.roles) : user.roles;
   return jwt.sign(
     {
       user_id: user.user_id,
       email: user.email,
-      roles: user.roles
+      roles: roles
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }

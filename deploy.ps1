@@ -93,7 +93,7 @@ if (-not $SkipAPI) {
     Write-Host "`nDeploying to AWS Lambda..." -ForegroundColor Cyan
     $stackName = "evalytics-survey-api-prod"
     
-    sam deploy --stack-name $stackName --region $awsRegion --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset --parameter-overrides "DbHost=$($envVars['MYSQL_PROD_HOST'])" "DbPort=$($envVars['MYSQL_PROD_PORT'])" "DbUser=$($envVars['MYSQL_PROD_USER'])" "DbPassword=$($envVars['MYSQL_PROD_PASSWORD'])" "DbName=$($envVars['MYSQL_PROD_DATABASE'])" "SesFromEmail=$($envVars['SES_FROM_EMAIL'])"
+    sam deploy --stack-name $stackName --region $awsRegion --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset --resolve-s3 --parameter-overrides "DbHost=$($envVars['MYSQL_PROD_HOST'])" "DbPort=$($envVars['MYSQL_PROD_PORT'])" "DbUser=$($envVars['MYSQL_PROD_USER'])" "DbPassword=$($envVars['MYSQL_PROD_PASSWORD'])" "DbName=$($envVars['MYSQL_PROD_DATABASE'])" "SesFromEmail=$($envVars['SES_FROM_EMAIL'])"
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "SAM deployment failed" -ForegroundColor Red

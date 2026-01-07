@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "VITE_API_BASE_URL=https://4y4wz559kj.execute-api.eu-central-1.amazonaws.com vite build",
+    "build:local": "vite build",
     "preview": "vite preview",
     "lint": "echo \"UI lint: TODO (zatím bez ESLint konfigurace)\"",
     "test": "echo \"UI tests: TODO (zatím bez testů)\""
