@@ -1,6 +1,6 @@
 // Forms handler - manages survey forms and their versions
 import { query, queryOne } from '../db.js';
-import { apiResponse, errorResponse, parseBody, generateId, formatDateTime } from '../utils.js';
+import { apiResponse, errorResponse, parseBody, generateId, formatDateTime, extractLanguagesFromSurveyJson } from '../utils.js';
 import { authenticate, requireRole } from '../auth.js';
 
 /**
@@ -31,9 +31,9 @@ export async function handleForms(event, method, path, authToken) {
     return await updateForm(event, user, getMatch[1]);
   }
 
-  // DELETE /forms/{id} - Delete form and all versions
+  // DELETE /forms/{id} - Soft delete form (with options)
   if (getMatch && method === 'DELETE') {
-    return await deleteForm(user, getMatch[1]);
+    return await softDeleteForm(event, user, getMatch[1]);
   }
 
   return errorResponse(404, 'NOT_FOUND', 'Form endpoint not found');
@@ -56,7 +56,9 @@ async function listForms(event, user) {
 
   let whereClauses = [];
   let queryParams = [];
-
+  // Always filter out soft-deleted items
+  whereClauses.push('f.removed = 0');
+  whereClauses.push('fv.removed = 0');
   if (id) {
     whereClauses.push('f.form_id = ?');
     queryParams.push(id);
@@ -121,12 +123,13 @@ async function listForms(event, user) {
                  f.last_update, 
                  f.created_by, 
                  f.last_modified_by,
-                 (SELECT COUNT(*) FROM form_versions WHERE form_id = f.form_id) as version_count
+                 (SELECT COUNT(*) FROM form_versions WHERE form_id = f.form_id AND removed = 0) as version_count
                FROM forms f
                INNER JOIN form_versions fv ON f.form_id = fv.form_id
                INNER JOIN (
                  SELECT form_id, MAX(version) as max_version
                  FROM form_versions
+                 WHERE removed = 0
                  GROUP BY form_id
                ) latest ON fv.form_id = latest.form_id AND fv.version = latest.max_version
                ${whereClause}
@@ -144,7 +147,7 @@ async function listForms(event, user) {
 
 async function createForm(event, user) {
   const body = parseBody(event);
-  const { name, surveyjs_version, languages, data, version_description } = body;
+  const { name, surveyjs_version, data, version_description } = body;
 
   if (!name || !surveyjs_version || !data) {
     return errorResponse(400, 'MISSING_FIELDS', 'name, surveyjs_version, and data are required');
@@ -153,6 +156,9 @@ async function createForm(event, user) {
   const formId = generateId(16);
   const versionId = generateId(16);
   const now = formatDateTime();
+
+  // Auto-extract languages from survey JSON
+  const detectedLanguages = extractLanguagesFromSurveyJson(data);
 
   // Create form master record
   await query(
@@ -172,7 +178,7 @@ async function createForm(event, user) {
       1,
       version_description || 'Initial version',
       surveyjs_version,
-      JSON.stringify(languages || ['en']),
+      JSON.stringify(detectedLanguages),
       JSON.stringify(data),
       now,
       now,
@@ -258,7 +264,9 @@ async function updateForm(event, user, formId) {
   const now = formatDateTime();
   const useName = name || form.name;
   const useSurveyJsVersion = surveyjs_version || latestVersion.surveyjs_version;
-  const useLanguages = languages || (typeof latestVersion.languages === 'string' ? JSON.parse(latestVersion.languages) : latestVersion.languages);
+  
+  // Auto-extract languages from survey JSON
+  const detectedLanguages = extractLanguagesFromSurveyJson(data);
 
   if (activeCampaigns.length > 0) {
     // Active campaigns exist - create new version
@@ -275,7 +283,7 @@ async function updateForm(event, user, formId) {
         newVersionNumber,
         version_description || `Version ${newVersionNumber}`,
         useSurveyJsVersion,
-        JSON.stringify(useLanguages),
+        JSON.stringify(detectedLanguages),
         JSON.stringify(data),
         now,
         now,
@@ -300,7 +308,7 @@ async function updateForm(event, user, formId) {
        WHERE version_id = ?`,
       [
         useSurveyJsVersion,
-        JSON.stringify(useLanguages),
+        JSON.stringify(detectedLanguages),
         JSON.stringify(data),
         version_description || latestVersion.version_description,
         now,
@@ -320,6 +328,104 @@ async function updateForm(event, user, formId) {
   }
 }
 
+async function softDeleteForm(event, user, formId) {
+  const body = parseBody(event);
+  const options = {
+    deleteVersions: body.deleteVersions !== false, // default true
+    deleteCampaigns: body.deleteCampaigns === true, // default false
+    deleteResponses: body.deleteResponses === true, // default false
+  };
+
+  const form = await queryOne(
+    'SELECT form_id FROM forms WHERE form_id = ? AND removed = 0',
+    [formId]
+  );
+
+  if (!form) {
+    return errorResponse(404, 'NOT_FOUND', 'Form not found or already removed');
+  }
+
+  // Get counts for response
+  const versionCount = await queryOne(
+    'SELECT COUNT(*) as count FROM form_versions WHERE form_id = ? AND removed = 0',
+    [formId]
+  );
+
+  const campaignCount = await queryOne(
+    `SELECT COUNT(DISTINCT c.campaign_id) as count
+     FROM campaigns c
+     INNER JOIN form_versions fv ON c.version_id = fv.version_id
+     WHERE fv.form_id = ? AND c.removed = 0`,
+    [formId]
+  );
+
+  const responseCount = await queryOne(
+    `SELECT COUNT(DISTINCT r.response_id) as count
+     FROM responses r
+     INNER JOIN campaigns c ON r.campaign_id = c.campaign_id
+     INNER JOIN form_versions fv ON c.version_id = fv.version_id
+     WHERE fv.form_id = ? AND r.removed = 0`,
+    [formId]
+  );
+
+  // Soft delete form
+  await query('UPDATE forms SET removed = 1 WHERE form_id = ?', [formId]);
+
+  let deletedItems = {
+    form: 1,
+    versions: 0,
+    campaigns: 0,
+    responses: 0,
+  };
+
+  // Optionally delete versions
+  if (options.deleteVersions) {
+    await query('UPDATE form_versions SET removed = 1 WHERE form_id = ?', [formId]);
+    deletedItems.versions = versionCount.count;
+  }
+
+  // Optionally delete campaigns
+  if (options.deleteCampaigns) {
+    await query(
+      `UPDATE campaigns c
+       INNER JOIN form_versions fv ON c.version_id = fv.version_id
+       SET c.removed = 1
+       WHERE fv.form_id = ?`,
+      [formId]
+    );
+    deletedItems.campaigns = campaignCount.count;
+
+    // Also mark respondents as removed if campaign is removed
+    await query(
+      `UPDATE campaign_respondents cr
+       INNER JOIN campaigns c ON cr.campaign_id = c.campaign_id
+       INNER JOIN form_versions fv ON c.version_id = fv.version_id
+       SET cr.removed = 1
+       WHERE fv.form_id = ? AND c.removed = 1`,
+      [formId]
+    );
+  }
+
+  // Optionally delete responses
+  if (options.deleteResponses) {
+    await query(
+      `UPDATE responses r
+       INNER JOIN campaigns c ON r.campaign_id = c.campaign_id
+       INNER JOIN form_versions fv ON c.version_id = fv.version_id
+       SET r.removed = 1
+       WHERE fv.form_id = ?`,
+      [formId]
+    );
+    deletedItems.responses = responseCount.count;
+  }
+
+  return apiResponse(200, {
+    message: 'Form soft deleted successfully',
+    deleted: deletedItems,
+  });
+}
+
+// Legacy hard delete function (keep for reference, not used)
 async function deleteForm(user, formId) {
   const form = await queryOne(
     'SELECT form_id FROM forms WHERE form_id = ?',

@@ -80,8 +80,12 @@ export async function verifyAPIToken(token) {
 export async function verifyRespondentToken(token, publicId = null) {
   const tokenHash = hashValue(token);
   
+  console.log('[verifyRespondentToken] Input token:', token);
+  console.log('[verifyRespondentToken] Token hash:', tokenHash);
+  console.log('[verifyRespondentToken] Public ID:', publicId);
+  
   let sql = `
-    SELECT cr.*, c.campaign_id, c.public_id, c.snapshot_id, c.open_on, c.close_on
+    SELECT cr.*, c.campaign_id, c.public_id, c.version_id, c.open_on, c.close_on
     FROM campaign_respondents cr
     JOIN campaigns c ON cr.campaign_id = c.campaign_id
     WHERE cr.token_hash = ?
@@ -94,6 +98,8 @@ export async function verifyRespondentToken(token, publicId = null) {
   }
 
   const respondent = await queryOne(sql, params);
+  
+  console.log('[verifyRespondentToken] Found respondent:', respondent ? 'YES' : 'NO');
   
   if (!respondent) return null;
 

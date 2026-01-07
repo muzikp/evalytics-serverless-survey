@@ -15,6 +15,18 @@ export function getPool() {
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'evalytics_survey',
+      charset: 'utf8mb4',
+      collation: 'utf8mb4_unicode_ci',
+      typeCast: function(field, next) {
+        // Ensure TEXT/VARCHAR fields are treated as UTF-8 strings
+        if (field.type === 'VAR_STRING' || field.type === 'STRING' || 
+            field.type === 'BLOB' || field.type === 'TINY_BLOB' || 
+            field.type === 'MEDIUM_BLOB' || field.type === 'LONG_BLOB') {
+          const value = field.string();
+          return value;
+        }
+        return next();
+      },
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,

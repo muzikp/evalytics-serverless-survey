@@ -1,11 +1,13 @@
 {
   "name": "evalytics-serverless-survey",
+  "type": "module",
   "private": true,
   "workspaces": [
     "UI",
     "API"
   ],
   "scripts": {
+    "dev": "pwsh -File dev.ps1",
     "dev:ui": "npm --workspace UI run dev",
     "build:ui": "npm --workspace UI run build",
     "lint:ui": "npm --workspace UI run lint",
@@ -19,5 +21,9 @@
     "lint": "npm -ws run lint",
     "test": "npm -ws run test",
     "build": "npm -ws run build"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.2.3"
   }
 }

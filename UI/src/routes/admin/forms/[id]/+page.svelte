@@ -10,8 +10,10 @@
     updateForm,
     createFormVersion,
   } from "$lib/api.js";
+  import { API_BASE_URL } from "$lib/config.js";
   import JsonEditor from "$lib/components/JsonEditor.svelte";
   import Spinner from "$lib/components/Spinner.svelte";
+  import DeleteFormModal from "$lib/components/DeleteFormModal.svelte";
   import { translations_store, currentLanguage } from "$lib/i18n/index.js";
   import {
     SURVEYJS_VERSIONS,
@@ -42,6 +44,9 @@
   let loading = true;
   let saving = false;
   let creatingVersion = false;
+  let deleting = false;
+  let showDeleteModal = false;
+  let deleteStats = { versionCount: 0, campaignCount: 0, responseCount: 0 };
   let activeTab = "setup";
   let previewJson = {};
   let error = "";
@@ -185,10 +190,10 @@
       // Validate JSON
       const data = editor.getJson();
 
+      // Note: languages are auto-extracted from survey JSON by the API
       const payload = {
         name: form.name.trim(),
         surveyjs_version: form.surveyjs_version.trim(),
-        languages: form.languages,
         data,
         version_description: form.version_description?.trim() || undefined,
       };
@@ -201,6 +206,7 @@
         await updateForm(templateId, payload);
         await loadForm();
         toast.success("Form updated successfully!");
+        // Don't reload page, just refresh data
       }
     } catch (err) {
       error = err.message;
@@ -221,11 +227,11 @@
       const maxVersion = Math.max(...versions.map((v) => v.version));
       const newVersionNumber = maxVersion + 1;
 
+      // Note: languages are auto-extracted from survey JSON by the API
       // Create new version
       const payload = {
         form_id: templateId,
         surveyjs_version: form.surveyjs_version.trim(),
-        languages: form.languages,
         data,
         version_description: `Version ${newVersionNumber}`,
       };
@@ -258,6 +264,70 @@
       editor.format();
     }
   }
+
+  async function handleDeleteClick() {
+    // Load stats before showing modal
+    try {
+      const response = await fetch(`${API_BASE_URL}/forms/${templateId}`, {
+        headers: { Authorization: `Bearer ${$auth.token}` },
+      });
+      const formData = await response.json();
+
+      // Count campaigns and responses
+      const campaignsResp = await fetch(
+        `${API_BASE_URL}/campaigns?form_id=${templateId}`,
+        { headers: { Authorization: `Bearer ${$auth.token}` } },
+      );
+      const campaignsData = await campaignsResp.json();
+
+      deleteStats = {
+        versionCount: formData.versions?.length || 0,
+        campaignCount: campaignsData.items?.length || 0,
+        responseCount: 0, // Would need separate endpoint
+      };
+
+      showDeleteModal = true;
+    } catch (err) {
+      toast.error("Failed to load delete stats: " + err.message);
+    }
+  }
+
+  async function handleDeleteConfirm(event) {
+    const options = event.detail;
+    deleting = true;
+    showDeleteModal = false;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/forms/${templateId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${$auth.token}`,
+        },
+        body: JSON.stringify(options),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Delete failed");
+      }
+
+      const result = await response.json();
+      toast.success(
+        `Form deleted successfully! Removed: ${result.deleted.form} form, ${result.deleted.versions} versions, ${result.deleted.campaigns} campaigns, ${result.deleted.responses} responses`,
+      );
+
+      goto("/admin/forms");
+    } catch (err) {
+      toast.error("Delete failed: " + err.message);
+    } finally {
+      deleting = false;
+    }
+  }
+
+  function handleDeleteCancel() {
+    showDeleteModal = false;
+  }
 </script>
 
 <svelte:head>
@@ -271,6 +341,28 @@
   </div>
   <div class="header-actions">
     {#if !isNewForm}
+      <button
+        on:click={handleDeleteClick}
+        class="btn-danger-outline"
+        disabled={deleting || loading || saving}
+        title="Delete this form"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+          />
+        </svg>
+        Delete
+      </button>
       <button
         on:click={handleCreateNewVersion}
         class="btn-secondary"
@@ -389,27 +481,30 @@
         </div>
 
         <div class="form-group">
-          <label for="languages">{t("forms.languages")} *</label>
-          <select
-            id="languages"
-            bind:value={form.languages}
-            multiple
-            size="3"
-            required
-          >
-            {#each FORM_LANGUAGES as lang}
-              <option
-                value={lang.code}
-                selected={form.languages.includes(lang.code)}
-              >
-                {lang.flag}
-                {lang.name}
-              </option>
-            {/each}
-          </select>
-          <small class="hint"
-            >Hold Ctrl (Cmd) to select multiple languages</small
-          >
+          <label for="languages">{t("forms.languages")}</label>
+          <div class="languages-readonly">
+            {#if form.languages && form.languages.length > 0}
+              {#each form.languages as langCode}
+                {@const lang = FORM_LANGUAGES.find((l) => l.code === langCode)}
+                {#if lang}
+                  <span class="language-badge">
+                    {lang.flag}
+                    {lang.name}
+                  </span>
+                {:else}
+                  <span class="language-badge">
+                    {langCode}
+                  </span>
+                {/if}
+              {/each}
+            {:else}
+              <span class="text-muted">No languages detected</span>
+            {/if}
+          </div>
+          <small class="hint">
+            Languages are automatically detected from multilingual fields in
+            your survey JSON
+          </small>
         </div>
 
         <div class="form-group">
@@ -499,6 +594,17 @@
       {/if}
     </div>
   {/if}
+{/if}
+
+{#if showDeleteModal}
+  <DeleteFormModal
+    formName={form.name}
+    versionCount={deleteStats.versionCount}
+    campaignCount={deleteStats.campaignCount}
+    responseCount={deleteStats.responseCount}
+    on:confirm={handleDeleteConfirm}
+    on:cancel={handleDeleteCancel}
+  />
 {/if}
 
 <style>
@@ -826,6 +932,40 @@
     background-color: #f5f5f5;
   }
 
+  .btn-danger-outline {
+    padding: 8px 16px;
+    background: white;
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+  }
+
+  .btn-danger-outline:hover {
+    background: #fef2f2;
+  }
+
+  .btn-danger-outline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .page-header {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 100;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 1rem;
+  }
+
   .btn-small {
     padding: 6px 12px;
     font-size: 13px;
@@ -838,6 +978,35 @@
 
   .btn-small:hover {
     background-color: #f5f5f5;
+  }
+
+  .languages-readonly {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    min-height: 48px;
+    align-items: center;
+  }
+
+  .language-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    background: #007bff;
+    color: white;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .text-muted {
+    color: #6c757d;
+    font-style: italic;
   }
 
   @media (max-width: 1024px) {

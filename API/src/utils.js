@@ -101,6 +101,45 @@ export function parseBody(event) {
 }
 
 /**
+ * Extract languages from SurveyJS JSON schema
+ * Scans all properties that might have multilingual values (title, description, text, etc.)
+ * and collects unique language codes
+ * @param {object} data - SurveyJS JSON schema
+ * @returns {string[]} Array of language codes
+ */
+export function extractLanguagesFromSurveyJson(data) {
+  const languages = new Set();
+  
+  // Helper to recursively scan for language objects
+  function scanForLanguages(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    
+    // Check if this is a language object (has 'default' key and other locale keys)
+    if (obj.default !== undefined) {
+      Object.keys(obj).forEach(key => {
+        if (key !== 'default' && typeof obj[key] === 'string') {
+          languages.add(key);
+        }
+      });
+      return; // Don't recurse into language objects
+    }
+    
+    // Recursively scan object properties
+    if (Array.isArray(obj)) {
+      obj.forEach(item => scanForLanguages(item));
+    } else {
+      Object.values(obj).forEach(value => scanForLanguages(value));
+    }
+  }
+  
+  scanForLanguages(data);
+  
+  // Always include 'en' as default if no languages found
+  const result = Array.from(languages).sort();
+  return result.length > 0 ? result : ['en'];
+}
+
+/**
  * Extract authorization token from event
  * @param {object} event
  * @returns {{type: string, token: string} | null}

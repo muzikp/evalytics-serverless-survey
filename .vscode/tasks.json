@@ -1,6 +1,9 @@
 {
   "version": "2.0.0",
   "tasks": [
+    // ==================================
+    // LOCAL DEVELOPMENT
+    // ==================================
     {
       "label": "🚀 Start Dev (API + UI)",
       "dependsOn": [
@@ -24,7 +27,7 @@
     {
       "label": "start-api",
       "type": "shell",
-      "command": "cd ${workspaceFolder}/API; sam build; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🚀 API Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://127.0.0.1:3000' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; Start-Process powershell -ArgumentList '-NoExit', '-Command', 'sam local start-api --port 3000 --template .aws-sam/build/template.yaml --env-vars env.json --docker-network host' -WorkingDirectory '${workspaceFolder}/API'",
+      "command": "cd ${workspaceFolder}/API; sam build; Write-Host ''; Write-Host '🔥 API Server (warm containers)' -ForegroundColor Green; Write-Host '📍 http://127.0.0.1:3000' -ForegroundColor Yellow; Write-Host ''; Start-Process powershell -ArgumentList '-NoExit', '-Command', 'Write-Host \"🚀 API Server\" -ForegroundColor Green; Write-Host \"📍 http://127.0.0.1:3000\" -ForegroundColor Yellow; Write-Host \"\"; sam local start-api --port 3000 --template .aws-sam/build/template.yaml --env-vars env.json --warm-containers EAGER --skip-pull-image' -WorkingDirectory '${workspaceFolder}/API'",
       "isBackground": false,
       "problemMatcher": {
         "pattern": {
@@ -46,7 +49,7 @@
     {
       "label": "start-ui",
       "type": "shell",
-      "command": "Start-Sleep -Seconds 3; cd ${workspaceFolder}/UI; Write-Host ''; Write-Host '========================================' -ForegroundColor Cyan; Write-Host '🎨 UI Server starting...' -ForegroundColor Green; Write-Host '📍 URL: http://localhost:5173' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; npm run dev",
+      "command": "Start-Sleep -Seconds 3; cd ${workspaceFolder}/UI; Write-Host ''; Write-Host '🎨 UI Dev Server' -ForegroundColor Green; Write-Host '📍 http://localhost:5174' -ForegroundColor Yellow; Write-Host ''; npm run dev",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
@@ -75,6 +78,225 @@
         "panel": "new"
       }
     },
+    
+    // ==================================
+    // DATABASE INITIALIZATION
+    // ==================================
+    {
+      "label": "🗄️ Init Database (Dev)",
+      "type": "shell",
+      "command": "${workspaceFolder}/init-database.ps1",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "database"
+      }
+    },
+    {
+      "label": "🗄️ Init Database (Dev - Skip Demo)",
+      "type": "shell",
+      "command": "${workspaceFolder}/init-database.ps1 -SkipDemoData",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "database"
+      }
+    },
+    {
+      "label": "🗄️ Init Database (Prod - No Demo)",
+      "type": "shell",
+      "command": "${workspaceFolder}/init-database.ps1 -Environment prod -SkipDemoData",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "database"
+      }
+    },
+    
+    // ==================================
+    // DEPLOYMENT - FULL
+    // ==================================
+    {
+      "label": "🚢 Deploy ALL (UI + API)",
+      "type": "shell",
+      "command": "${workspaceFolder}/deploy.ps1",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "🚢 Deploy ALL (Custom Message)",
+      "type": "shell",
+      "command": "$msg = Read-Host 'Commit message'; ${workspaceFolder}/deploy.ps1 -CommitMessage $msg",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    
+    // ==================================
+    // DEPLOYMENT - UI ONLY
+    // ==================================
+    {
+      "label": "🎨 Deploy UI Only",
+      "type": "shell",
+      "command": "${workspaceFolder}/deploy.ps1 -SkipAPI",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "deployment"
+      }
+    },
+    {
+      "label": "🎨 Build UI (Local)",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/UI; npm run build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "build"
+      }
+    },
+    
+    // ==================================
+    // DEPLOYMENT - API ONLY
+    // ==================================
+    {
+      "label": "🚀 Deploy API Only",
+      "type": "shell",
+      "command": "${workspaceFolder}/deploy.ps1 -SkipUI",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "deployment"
+      }
+    },
+    {
+      "label": "🔨 SAM Build",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/API; sam build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "build"
+      }
+    },
+    {
+      "label": "🔨 SAM Build + Deploy (Manual)",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/API; sam build; sam deploy --stack-name evalytics-survey-api-prod --region eu-central-1 --capabilities CAPABILITY_IAM",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "deployment"
+      }
+    },
+    
+    // ==================================
+    // VALIDATION & TESTING
+    // ==================================
+    {
+      "label": "✅ Validate SAM Template",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/API; sam validate",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "validation"
+      }
+    },
+    {
+      "label": "🧪 Test API Health (Local)",
+      "type": "shell",
+      "command": "curl http://localhost:3000/health",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "testing"
+      }
+    },
+    {
+      "label": "🧪 Test API Health (Prod)",
+      "type": "shell",
+      "command": "curl https://api.evalytics.cz/health",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "testing"
+      }
+    },
+    
+    // ==================================
+    // GIT OPERATIONS
+    // ==================================
+    {
+      "label": "📤 Git Push",
+      "type": "shell",
+      "command": "git push origin main",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "git"
+      }
+    },
+    {
+      "label": "📊 Git Status",
+      "type": "shell",
+      "command": "git status",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "git"
+      }
+    },
+    
+    // ==================================
+    // AWS OPERATIONS
+    // ==================================
+    {
+      "label": "☁️ AWS: Get CloudFormation Outputs",
+      "type": "shell",
+      "command": "aws cloudformation describe-stacks --stack-name evalytics-survey-api-prod --region eu-central-1 --query 'Stacks[0].Outputs' --output table",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "aws"
+      }
+    },
+    {
+      "label": "☁️ AWS: Tail Lambda Logs",
+      "type": "shell",
+      "command": "sam logs --stack-name evalytics-survey-api-prod --tail",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "aws"
+      }
+    },
+    
+    // ==================================
+    // LEGACY (kept for compatibility)
+    // ==================================
     {
       "label": "Dev: API (SAM local)",
       "type": "shell",

@@ -42,7 +42,9 @@
     error = "";
     try {
       const response = await getForms(filters);
-      forms = response.forms || [];
+      forms = (response.forms || []).sort(
+        (a, b) => new Date(b.last_update) - new Date(a.last_update),
+      );
 
       // Extract unique languages and versions from all forms
       if (
@@ -122,7 +124,7 @@
 
 <div class="page-header">
   <h1>{t("forms.title")}</h1>
-  <a href="/admin/forms/new" class="btn-primary">{t("forms.new")}</a>
+  <a href="/admin/forms/new" class="btn-create">{t("forms.new")}</a>
 </div>
 
 <div class="filters">
@@ -189,81 +191,89 @@
     <a href="/admin/forms/new" class="btn-primary">Create Form</a>
   </div>
 {:else}
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>SurveyJS Version</th>
-          <th>Languages</th>
-          <th>Versions</th>
-          <th>Created</th>
-          <th>Last Update</th>
-          <th class="actions-header">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each forms as form}
-          <tr class="fade-in">
-            <td>
-              <a href="/admin/forms/{form.form_id}" class="form-link">
-                {form.name}
-              </a>
-            </td>
-            <td
-              ><span class="badge badge-secondary">{form.surveyjs_version}</span
-              ></td
+  <div class="forms-list">
+    {#each forms as form}
+      <div class="form-card">
+        <div class="form-header">
+          <h3>
+            <a href="/admin/forms/{form.form_id}" class="form-link">
+              {form.name}
+            </a>
+          </h3>
+          <span class="badge badge-secondary">{form.surveyjs_version}</span>
+        </div>
+
+        <div class="form-meta">
+          <div class="meta-item">
+            <strong>Languages:</strong>
+            <div class="language-tags">
+              {#each form.languages || [] as lang}
+                <span class="badge badge-light">{lang.toUpperCase()}</span>
+              {/each}
+            </div>
+          </div>
+          <div class="meta-item">
+            <strong>Versions:</strong>
+            <span class="count-badge">{form.version_count || 0}</span>
+          </div>
+          <div class="meta-item">
+            <strong>Created:</strong>
+            <span class="text-muted" title={formatDateTime(form.created, "cs")}
+              >{timeAgo(form.created, "cs")}</span
             >
-            <td>
-              <div class="language-tags">
-                {#each form.languages || [] as lang}
-                  <span class="badge badge-light">{lang}</span>
-                {/each}
-              </div>
-            </td>
-            <td><span class="count-badge">{form.version_count || 0}</span></td>
-            <td class="text-muted" title={formatDateTime(form.created, "cs")}
-              >{timeAgo(form.created, "cs")}</td
-            >
-            <td
+          </div>
+          <div class="meta-item">
+            <strong>Updated:</strong>
+            <span
               class="text-muted"
               title={formatDateTime(form.last_update, "cs")}
-              >{timeAgo(form.last_update, "cs")}</td
+              >{timeAgo(form.last_update, "cs")}</span
             >
-            <td class="actions">
-              <a
-                href="/admin/forms/{form.form_id}"
-                class="btn-icon"
-                title="Edit"
-              >
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-              </a>
-              <button
-                on:click={() => handleDelete(form.form_id, form.name)}
-                class="btn-icon btn-danger"
-                title="Delete"
-              >
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <a href="/admin/forms/{form.form_id}" class="btn-primary btn-sm">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+            Edit
+          </a>
+          <button
+            on:click={() => handleDelete(form.form_id, form.name)}
+            class="btn-danger btn-sm"
+            title="Delete"
+          >
+            <svg
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    {/each}
   </div>
 {/if}
 
@@ -399,65 +409,113 @@
     margin-bottom: 1.5rem;
   }
 
-  .card {
+  .forms-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .form-card {
+    padding: 1.5rem;
     background: white;
-    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
     box-shadow: var(--shadow-sm);
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    transition: all 0.2s;
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  .form-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
   }
 
-  thead {
-    background: var(--color-bg-tertiary);
-    border-bottom: 2px solid var(--color-border);
+  .form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
   }
 
-  th {
-    padding: 1rem 1.25rem;
-    text-align: left;
+  .form-header h3 {
+    margin: 0;
+    font-size: 1.125rem;
     font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-secondary);
-  }
-
-  .actions-header {
-    text-align: right;
-  }
-
-  td {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--color-border-light);
-    font-size: 0.875rem;
-  }
-
-  tbody tr {
-    transition: background-color 0.15s;
-  }
-
-  tbody tr:hover {
-    background-color: var(--color-bg-secondary);
-  }
-
-  tbody tr:last-child td {
-    border-bottom: none;
+    flex: 1;
   }
 
   .form-link {
-    color: var(--color-primary);
+    color: var(--color-text);
     text-decoration: none;
-    font-weight: 500;
     transition: color 0.2s;
   }
 
   .form-link:hover {
-    color: var(--color-primary-hover);
-    text-decoration: underline;
+    color: var(--color-primary);
+  }
+
+  .form-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-border-light);
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .meta-item strong {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    min-width: 80px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: auto;
+  }
+
+  .btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-hover);
+    transform: translateY(-1px);
+  }
+
+  .btn-danger {
+    background: var(--color-danger);
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
   }
 
   .badge {
@@ -476,6 +534,7 @@
   .badge-light {
     background: var(--color-bg-tertiary);
     color: var(--color-text-secondary);
+    margin-right: 0.25rem;
   }
 
   .language-tags {
@@ -494,37 +553,12 @@
     background: var(--color-bg-tertiary);
     border-radius: var(--radius-sm);
     font-weight: 600;
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: flex-end;
-  }
-
-  .btn-primary {
-    padding: 0.625rem 1.25rem;
-    background: var(--color-primary);
-    color: white;
-    text-decoration: none;
-    border: none;
-    border-radius: var(--radius-md);
     font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s;
-    box-shadow: var(--shadow-sm);
+    color: var(--color-text);
   }
 
-  .btn-primary:hover {
-    background: var(--color-primary-hover);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+  .text-muted {
+    color: var(--color-text-secondary);
   }
 
   .btn-secondary {
@@ -543,36 +577,26 @@
     border-color: var(--color-text-tertiary);
   }
 
-  .btn-icon {
+  .btn-create {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
-    background: transparent;
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    padding: 0.625rem 1.25rem;
+    background: var(--color-primary);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
-    text-decoration: none;
+    border: none;
   }
 
-  .btn-icon svg {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-
-  .btn-icon:hover {
-    background: var(--color-primary-light);
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-  }
-
-  .btn-icon.btn-danger:hover {
-    background: #fef2f2;
-    color: var(--color-danger);
-    border-color: var(--color-danger);
+  .btn-create:hover {
+    background: var(--color-primary-dark);
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 </style>

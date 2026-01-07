@@ -1,6 +1,6 @@
 // Form Versions handler - manages individual versions of forms
 import { query, queryOne } from '../db.js';
-import { apiResponse, errorResponse, parseBody, generateId, formatDateTime } from '../utils.js';
+import { apiResponse, errorResponse, parseBody, generateId, formatDateTime, extractLanguagesFromSurveyJson } from '../utils.js';
 import { authenticate, requireRole } from '../auth.js';
 
 /**
@@ -151,7 +151,7 @@ async function listFormVersions(event, user) {
 
 async function createFormVersion(event, user) {
   const body = parseBody(event);
-  const { form_id, surveyjs_version, languages, data, version_description } = body;
+  const { form_id, surveyjs_version, data, version_description } = body;
 
   if (!form_id || !data) {
     return errorResponse(400, 'MISSING_FIELDS', 'form_id and data are required');
@@ -169,11 +169,14 @@ async function createFormVersion(event, user) {
 
   // Get latest version to determine next version number
   const lastVersion = await queryOne(
-    'SELECT MAX(version) as max_version FROM form_versions WHERE form_id = ?',
+    'SELECT MAX(version) as max_version, surveyjs_version FROM form_versions WHERE form_id = ? GROUP BY surveyjs_version LIMIT 1',
     [form_id]
   );
   
   const newVersionNumber = (lastVersion?.max_version || 0) + 1;
+
+  // Auto-extract languages from survey JSON
+  const detectedLanguages = extractLanguagesFromSurveyJson(data);
 
   const versionId = generateId(16);
   const now = formatDateTime();
@@ -187,8 +190,8 @@ async function createFormVersion(event, user) {
       form.name,
       newVersionNumber,
       version_description || `Version ${newVersionNumber}`,
-      surveyjs_version || lastVersion.surveyjs_version || '1.9',
-      JSON.stringify(languages || ['en']),
+      surveyjs_version || lastVersion?.surveyjs_version || '1.9',
+      JSON.stringify(detectedLanguages),
       JSON.stringify(data),
       now,
       now,

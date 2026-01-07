@@ -1,47 +1,57 @@
 // Public survey handler - for respondents
 import { query, queryOne } from '../db.js';
-import { apiResponse, errorResponse, parseBody, generateId, formatDateTime, extractAuthToken } from '../utils.js';
+import { apiResponse, errorResponse, parseBody, generateId, formatDateTime, hashValue } from '../utils.js';
 import { verifyRespondentToken } from '../auth.js';
 
-export async function handlePublicSurvey(event, method, path, authToken) {
-  // GET /survey - List public surveys (no auth required)
-  if (path === '/survey' && method === 'GET') {
-    return await listPublicSurveys();
+// Extract token from query parameters or headers
+function extractAuthToken(event) {
+  // Check query parameters
+  const token = event.queryStringParameters?.token;
+  if (token) {
+    return { type: 'respondent', token };
   }
+  
+  // Check Authorization header (format: "Bearer <token>")
+  const authHeader = event.headers?.Authorization || event.headers?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return { type: 'respondent', token: authHeader.substring(7) };
+  }
+  
+  return null;
+}
 
-  // GET /survey/{public_id} - Get survey by public ID
+export async function handlePublicSurvey(event, method, path) {
+  // GET /survey/{publicId} - Get survey for respondent
   const getSurveyMatch = path.match(/^\/survey\/([^/]+)$/);
   if (getSurveyMatch && method === 'GET') {
+    const authToken = extractAuthToken(event);
     return await getPublicSurvey(getSurveyMatch[1], authToken);
   }
 
-  // POST /survey/{public_id}/response - Submit or update response
-  const responseMatch = path.match(/^\/survey\/([^/]+)\/response$/);
-  if (responseMatch && method === 'POST') {
-    return await submitResponse(event, responseMatch[1], authToken);
+  // GET /survey/{publicId}/response/current - Get current response for respondent
+  const getCurrentMatch = path.match(/^\/survey\/([^/]+)\/response\/current$/);
+  if (getCurrentMatch && method === 'GET') {
+    const authToken = extractAuthToken(event);
+    return await getCurrentResponse(event, getCurrentMatch[1], authToken);
   }
 
-  // GET /survey/{public_id}/response - Get current response
-  if (responseMatch && method === 'GET') {
-    return await getCurrentResponse(event, responseMatch[1], authToken);
+  // POST /survey/{publicId}/response - Submit survey response
+  const submitMatch = path.match(/^\/survey\/([^/]+)\/response$/);
+  if (submitMatch && method === 'POST') {
+    const authToken = extractAuthToken(event);
+    return await submitResponse(event, submitMatch[1], authToken);
   }
 
-  // POST /survey/{public_id}/attempts - Create new attempt
-  const attemptsMatch = path.match(/^\/survey\/([^/]+)\/attempts$/);
-  if (attemptsMatch && method === 'POST') {
-    return await createNewAttempt(event, attemptsMatch[1], authToken);
-  }
-
-  return errorResponse(404, 'NOT_FOUND', 'Public survey endpoint not found');
+  return errorResponse(404, 'NOT_FOUND', 'Survey endpoint not found');
 }
 
 async function listPublicSurveys() {
   // List currently open campaigns
   const campaigns = await query(
-    `SELECT c.public_id, c.title, c.description, c.open_on, c.close_on, s.version, t.name as template_name
+    `SELECT c.public_id, c.title, c.description, c.open_on, c.close_on, fv.version, f.name as form_name
      FROM campaigns c
-     LEFT JOIN snapshots s ON c.snapshot_id = s.snapshot_id
-     LEFT JOIN templates t ON s.template_id = t.template_id
+     LEFT JOIN form_versions fv ON c.version_id = fv.version_id
+     LEFT JOIN forms f ON fv.form_id = f.form_id
      WHERE (c.open_on IS NULL OR c.open_on <= NOW())
        AND (c.close_on IS NULL OR c.close_on >= NOW())
      ORDER BY c.created DESC`
@@ -52,8 +62,8 @@ async function listPublicSurveys() {
       public_id: c.public_id,
       title: typeof c.title === 'string' ? JSON.parse(c.title) : c.title,
       description: c.description ? (typeof c.description === 'string' ? JSON.parse(c.description) : c.description) : null,
-      template_name: c.template_name,
-      snapshot_version: c.version
+      form_name: c.form_name,
+      form_version: c.version
     }))
   });
 }
@@ -61,9 +71,9 @@ async function listPublicSurveys() {
 async function getPublicSurvey(publicId, authToken) {
   // Get campaign info
   const campaign = await queryOne(
-    `SELECT c.*, s.data as snapshot_data, s.surveyjs_version, s.languages
+    `SELECT c.*, fv.data as form_data, fv.surveyjs_version, fv.languages
      FROM campaigns c
-     LEFT JOIN snapshots s ON c.snapshot_id = s.snapshot_id
+     LEFT JOIN form_versions fv ON c.version_id = fv.version_id
      WHERE c.public_id = ?`,
     [publicId]
   );
@@ -89,13 +99,15 @@ async function getPublicSurvey(publicId, authToken) {
 
   return apiResponse(200, {
     public_id: campaign.public_id,
-    title: typeof campaign.title === 'string' ? JSON.parse(campaign.title) : campaign.title,
-    description: campaign.description ? (typeof campaign.description === 'string' ? JSON.parse(campaign.description) : campaign.description) : null,
+    title: campaign.title,  // MySQL JSON column already parsed
+    description: campaign.description,  // MySQL JSON column already parsed
     surveyjs_version: campaign.surveyjs_version,
-    languages: typeof campaign.languages === 'string' ? JSON.parse(campaign.languages) : campaign.languages,
-    survey_data: typeof campaign.snapshot_data === 'string' ? JSON.parse(campaign.snapshot_data) : campaign.snapshot_data,
+    languages: campaign.languages,  // MySQL JSON column already parsed
+    survey_data: campaign.form_data,  // MySQL JSON column already parsed
     allow_multiple_responses: campaign.allow_multiple_responses,
     max_attempts: campaign.max_attempts,
+    can_edit_after_submit: Boolean(campaign.can_edit_after_submit),
+    can_reopen_after_submit: Boolean(campaign.can_reopen_after_submit ?? true), // Default true if null
     respondent: respondent ? {
       respondent_id: respondent.respondent_id,
       email: respondent.email
@@ -168,14 +180,16 @@ async function submitResponse(event, publicId, authToken) {
   if (!response) {
     // Create first response
     const responseId = generateId(64);
+    // Get version_id from campaign
+    const campaign = await queryOne('SELECT version_id FROM campaigns WHERE campaign_id = ?', [respondent.campaign_id]);
     await query(
-      `INSERT INTO responses (response_id, respondent_id, campaign_id, snapshot_id, attempt_no, status, data, client_meta, submitted_at, created, last_update)
+      `INSERT INTO responses (response_id, respondent_id, campaign_id, version_id, attempt_no, status, data, client_meta, submitted_at, created, last_update)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         responseId,
         respondent.respondent_id,
         respondent.campaign_id,
-        respondent.snapshot_id,
+        campaign.version_id,
         1,
         status,
         JSON.stringify(data),
@@ -248,14 +262,17 @@ async function createNewAttempt(event, publicId, authToken) {
   const responseId = generateId(64);
   const now = formatDateTime();
 
+  // Get version_id from campaign
+  const campaignInfo = await queryOne('SELECT version_id FROM campaigns WHERE campaign_id = ?', [respondent.campaign_id]);
+
   await query(
-    `INSERT INTO responses (response_id, respondent_id, campaign_id, snapshot_id, attempt_no, status, data, created, last_update)
+    `INSERT INTO responses (response_id, respondent_id, campaign_id, version_id, attempt_no, status, data, created, last_update)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       responseId,
       respondent.respondent_id,
       respondent.campaign_id,
-      respondent.snapshot_id,
+      campaignInfo.version_id,
       nextAttemptNo,
       'in_progress',
       JSON.stringify({}),

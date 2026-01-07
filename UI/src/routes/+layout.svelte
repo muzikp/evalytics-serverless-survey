@@ -25,9 +25,7 @@
 
 <header class="header">
   <div class="brand">
-    <a class="brandLink" href="/" on:click|preventDefault={() => goto("/")}
-      >{t("app.name")}</a
-    >
+    <a class="brandLink" href="/">{t("app.name")}</a>
   </div>
   <nav class="nav">
     {#if $auth}
@@ -46,7 +44,7 @@
         {/each}
       </div>
       <button on:click={handleLogout} class="logout-btn"
-        >{t("auth.logout")} ({$auth.user?.email || "User"})</button
+        >{t("auth.logout")}</button
       >
     {:else}
       <a href="{base}/login">{t("auth.login")}</a>

@@ -10,7 +10,7 @@
     "lint": "echo \"TODO: eslint\" && exit 0",
     "sam:validate": "sam validate",
     "sam:build": "sam build",
-    "sam:local": "sam local start-api",
+    "sam:local": "sam local start-api --warm-containers EAGER --skip-pull-image",
     "sam:deploy": "sam deploy --resolve-s3 --capabilities CAPABILITY_IAM"
   },
   "dependencies": {

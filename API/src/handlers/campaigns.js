@@ -61,7 +61,9 @@ async function listCampaigns(event, user) {
   // Note: LIMIT and OFFSET must be directly interpolated (not as params) due to MySQL2 driver limitations
   const campaigns = await query(
     `SELECT c.*, fv.version as form_version, f.name as form_name,
-            u1.firstname as created_by_firstname, u1.lastname as created_by_lastname
+            u1.firstname as created_by_firstname, u1.lastname as created_by_lastname,
+            (SELECT COUNT(*) FROM campaign_respondents cr WHERE cr.campaign_id = c.campaign_id) as respondent_count,
+            (SELECT COUNT(*) FROM campaign_respondents cr WHERE cr.campaign_id = c.campaign_id AND cr.invitation_sent_at IS NOT NULL) as invitations_sent
      FROM campaigns c
      LEFT JOIN form_versions fv ON c.version_id = fv.version_id
      LEFT JOIN forms f ON fv.form_id = f.form_id
@@ -95,13 +97,7 @@ async function listCampaigns(event, user) {
         // If parse fails, use as-is
       }
       
-      try {
-        if (email_template && typeof email_template === 'string') {
-          email_template = JSON.parse(email_template);
-        }
-      } catch (e) {
-        // If parse fails, use as-is
-      }
+      // email_template is stored as plain HTML string, no parsing needed
       
       return {
         ...c,
@@ -142,7 +138,7 @@ async function createCampaign(event, user) {
       finalPublicId,
       JSON.stringify(title),
       description ? JSON.stringify(description) : null,
-      email_template ? JSON.stringify(email_template) : null,
+      email_template || null,
       open_on || null,
       close_on || null,
       is_public || 0,
@@ -172,6 +168,9 @@ async function createCampaign(event, user) {
         }
       });
       
+      // Store token in data field for later retrieval
+      customData.token = token;
+      
       await query(
         `INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -181,7 +180,7 @@ async function createCampaign(event, user) {
           resp.email,
           emailHash,
           tokenHash,
-          Object.keys(customData).length > 0 ? JSON.stringify(customData) : null,
+          JSON.stringify(customData),
           now,
           now
         ]
@@ -222,9 +221,7 @@ async function getCampaign(campaignId) {
     if (description && typeof description === 'string') description = JSON.parse(description);
   } catch (e) {}
   
-  try {
-    if (email_template && typeof email_template === 'string') email_template = JSON.parse(email_template);
-  } catch (e) {}
+  // email_template is stored as plain HTML string, no parsing needed
   
   try {
     if (form_data && typeof form_data === 'string') form_data = JSON.parse(form_data);
@@ -256,7 +253,7 @@ async function updateCampaign(event, user, campaignId) {
   }
   if (email_template !== undefined) {
     updates.push('email_template = ?');
-    params.push(JSON.stringify(email_template));
+    params.push(email_template);
   }
   if (open_on !== undefined) {
     updates.push('open_on = ?');
@@ -387,6 +384,9 @@ async function addRespondents(event, user, campaignId) {
     const tokenHash = hashValue(token);
     const emailHash = hashValue(email);
 
+    // Store token in data field for later retrieval
+    const dataWithToken = data ? { ...data, token } : { token };
+
     await query(
       `INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -396,7 +396,7 @@ async function addRespondents(event, user, campaignId) {
         email,
         emailHash,
         tokenHash,
-        data ? JSON.stringify(data) : null,
+        JSON.stringify(dataWithToken),
         now,
         now
       ]
