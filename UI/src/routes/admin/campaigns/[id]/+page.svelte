@@ -855,40 +855,156 @@
     {/if}
 
     <form on:submit|preventDefault={handleSave}>
-      <div class="form-group">
-        <label for="name">Campaign Name *</label>
-        <input
-          id="name"
-          type="text"
-          bind:value={campaign.name}
-          required
-          placeholder="Enter campaign name"
-        />
-      </div>
+      
+      <!-- General Section -->
+      <AccordionSection 
+        title="General Settings" 
+        isOpen={accordionOpen.general}
+        onToggle={() => toggleAccordion('general')}
+      >
+        <div class="form-group">
+          <label for="name">Campaign Name *</label>
+          <input
+            id="name"
+            type="text"
+            bind:value={campaign.name}
+            required
+            placeholder="Enter campaign name"
+          />
+        </div>
 
-      <div class="form-group">
-        <label for="public_id">Public Name</label>
-        <input
-          id="public_id"
-          type="text"
-          bind:value={campaign.public_id}
-          placeholder="URL-friendly name (e.g. customer-satisfaction-2026)"
-        />
-        <small style="color: #666;"
-          >If empty, form ID will be used in the survey URL</small
-        >
-      </div>
+        <div class="form-group">
+          <label for="public_id">Public Name</label>
+          <input
+            id="public_id"
+            type="text"
+            bind:value={campaign.public_id}
+            placeholder="URL-friendly name (e.g. customer-satisfaction-2026)"
+          />
+          <small style="color: #666;"
+            >If empty, form ID will be used in the survey URL</small
+          >
+        </div>
 
-      <div class="form-group">
-        <label for="description">Description</label>
-        <textarea
-          id="description"
-          bind:value={campaign.description}
-          rows="3"
-          placeholder="Internal notes for this campaign (optional)"
-        ></textarea>
-      </div>
+        <div class="form-group">
+          <label for="description">Description</label>
+          <textarea
+            id="description"
+            bind:value={campaign.description}
+            rows="3"
+            placeholder="Internal notes for this campaign (optional)"
+          ></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="form">Form *</label>
+          <select id="form" bind:value={campaign.form_id} required>
+            <option value="">Select a form...</option>
+            {#each forms as form}
+              <option value={form.form_id}>{form.name}</option>
+            {/each}
+          </select>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            Select the survey form for this campaign
+          </small>
+        </div>
 
+        {#if campaign.form_id && formVersions.length > 0}
+          <div class="form-group">
+            <label for="version">Form Version *</label>
+            <select id="version" bind:value={campaign.version_id} required>
+              {#each formVersions as version}
+                <option value={version.version_id}>
+                  v{version.version}
+                  {version.version_description
+                    ? `- ${version.version_description}`
+                    : ""}
+                </option>
+              {/each}
+            </select>
+            {#if formVersions.length === 1}
+              <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Only one version available
+              </small>
+            {/if}
+          </div>
+        {/if}
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="start_date">Start Date</label>
+            <input id="start_date" type="date" bind:value={campaign.open_on} />
+          </div>
+
+          <div class="form-group">
+            <label for="end_date">End Date</label>
+            <input id="end_date" type="date" bind:value={campaign.close_on} />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" bind:checked={campaign.is_public} />
+            Public Campaign
+          </label>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            If enabled, anyone with the link can access the survey (no email invitations)
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" bind:checked={campaign.allow_retries} />
+            Allow Multiple Responses
+          </label>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            If enabled, respondents can submit multiple responses
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input
+              type="checkbox"
+              bind:checked={campaign.response_persistence}
+            />
+            Save Progress Automatically
+          </label>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            If enabled, respondents will see their previous answers when reopening
+            the survey
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input
+              type="checkbox"
+              bind:checked={campaign.can_edit_after_submit}
+            />
+            Allow editing after submit
+          </label>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            If enabled, respondents can reopen and edit their submitted responses
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input
+              type="checkbox"
+              bind:checked={campaign.can_reopen_after_submit}
+            />
+            Can reopen after submit
+          </label>
+          <small style="color: #666; display: block; margin-top: 0.25rem;">
+            If disabled, tokens will be invalidated after submission and redirect
+            to homepage
+          </small>
+        </div>
+      </AccordionSection>
+
+      <!-- Respondents Section -->
       {#if !campaign.is_public}
         <div class="form-section email-template-section">
           <div class="section-header">
@@ -971,118 +1087,13 @@
         </div>
       {/if}
 
-      <div class="form-group">
-        <label for="form">Form *</label>
-        <select id="form" bind:value={campaign.form_id} required>
-          <option value="">Select a form...</option>
-          {#each forms as form}
-            <option value={form.form_id}>{form.name}</option>
-          {/each}
-        </select>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          Select the survey form for this campaign
-        </small>
-      </div>
-
-      {#if campaign.form_id && formVersions.length > 0}
-        <div class="form-group">
-          <label for="version">Form Version *</label>
-          <select id="version" bind:value={campaign.version_id} required>
-            {#each formVersions as version}
-              <option value={version.version_id}>
-                v{version.version}
-                {version.version_description
-                  ? `- ${version.version_description}`
-                  : ""}
-              </option>
-            {/each}
-          </select>
-          {#if formVersions.length === 1}
-            <small style="color: #666;">Only one version available</small>
-          {/if}
-        </div>
-      {/if}
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="open_on">Open Date</label>
-          <input id="open_on" type="date" bind:value={campaign.open_on} />
-          <small style="color: #666;"
-            >Optional - no start restriction if empty</small
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="close_on">Close Date</label>
-          <input id="close_on" type="date" bind:value={campaign.close_on} />
-          <small style="color: #666;"
-            >Optional - no end restriction if empty</small
-          >
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <input type="checkbox" bind:checked={campaign.is_public} />
-          Public survey (anyone with link can respond)
-        </label>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          If enabled, anonymous respondents will be created automatically
-        </small>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <input type="checkbox" bind:checked={campaign.allow_retries} />
-          Allow multiple attempts
-        </label>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          If disabled, respondents can only complete the survey once
-        </small>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <input type="checkbox" bind:checked={campaign.response_persistence} />
-          Response persistence
-        </label>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          If enabled, respondents will see their previous answers when reopening
-          the survey
-        </small>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <input
-            type="checkbox"
-            bind:checked={campaign.can_edit_after_submit}
-          />
-          Allow editing after submit
-        </label>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          If enabled, respondents can reopen and edit their submitted responses
-        </small>
-      </div>
-
-      <div class="form-group">
-        <label>
-          <input
-            type="checkbox"
-            bind:checked={campaign.can_reopen_after_submit}
-          />
-          Can reopen after submit
-        </label>
-        <small style="color: #666; display: block; margin-top: 0.25rem;">
-          If disabled, tokens will be invalidated after submission and redirect
-          to homepage
-        </small>
-      </div>
-
       <!-- Respondents Section -->
       {#if !campaign.is_public}
-        <div class="respondents-section">
-          <h3>Respondents</h3>
+        <AccordionSection 
+          title="Respondents" 
+          isOpen={accordionOpen.respondents}
+          onToggle={() => toggleAccordion('respondents')}
+        >
           <p style="color: #666; margin-bottom: 1rem;">
             Add respondents who will receive survey invitations
           </p>
@@ -1227,7 +1238,185 @@
               </p>
             </div>
           {/if}
-        </div>
+        </AccordionSection>
+        
+        <!-- Email Template Section -->
+        <AccordionSection 
+          title="Email Template" 
+          isOpen={accordionOpen.email}
+          onToggle={() => toggleAccordion('email')}
+        >
+          
+          <!-- Custom Placeholders Table -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <label style="margin: 0;">Custom Email Placeholders</label>
+              <button
+                type="button"
+                class="btn-secondary"
+                style="padding: 0.375rem 0.75rem; font-size: 0.875rem;"
+                on:click={addEmailTemplateField}
+              >
+                ➕ Add Field
+              </button>
+            </div>
+            <small style="color: #666; display: block; margin-bottom: 1rem;">
+              Create custom placeholders with translations for different languages
+            </small>
+            
+            {#if emailTemplateFields.length > 0}
+              <div class="email-fields-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 25%;">Placeholder ID</th>
+                      <th style="width: 25%;">Czech (cs)</th>
+                      <th style="width: 25%;">English (en)</th>
+                      <th style="width: 20%;">German (de)</th>
+                      <th style="width: 5%; text-align: center;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each emailTemplateFields as field, index}
+                      <tr>
+                        <td>
+                          <input
+                            type="text"
+                            bind:value={field.id}
+                            placeholder="e.g. greeting"
+                            style="width: 100%;"
+                          />
+                          <code style="font-size: 0.75rem; color: #666;">
+                            {generateFieldPlaceholder(field.id)}
+                          </code>
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            bind:value={field.cs}
+                            placeholder="Dobrý den"
+                            style="width: 100%;"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            bind:value={field.en}
+                            placeholder="Hello"
+                            style="width: 100%;"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            bind:value={field.de}
+                            placeholder="Guten Tag"
+                            style="width: 100%;"
+                          />
+                        </td>
+                        <td style="text-align: center;">
+                          <button
+                            type="button"
+                            class="btn-icon"
+                            on:click={() => removeEmailTemplateField(index)}
+                            title="Remove field"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <p style="color: #999; font-style: italic; padding: 1rem; background: #f9f9f9; border-radius: 4px;">
+                No custom placeholders defined. Click "Add Field" to create one.
+              </p>
+            {/if}
+          </div>
+
+          <!-- Email Template Editor -->
+          <div class="form-section email-template-section">
+            <div class="section-header">
+              <div class="editor-controls">
+                <div class="placeholder-controls">
+                  <label for="placeholder-select">Insert Placeholder:</label>
+                  <select
+                    id="placeholder-select"
+                    on:change={(e) => {
+                      insertPlaceholder(e.target.value);
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">-- Select placeholder --</option>
+                    {#each availablePlaceholders.filter(p => p.category === 'System') as placeholder}
+                      <option value={placeholder.value}>
+                        {placeholder.label} ({placeholder.category})
+                      </option>
+                    {/each}
+                    {#if availablePlaceholders.filter(p => p.category === 'Respondent').length > 0}
+                      <optgroup label="Respondent Attributes">
+                        {#each availablePlaceholders.filter(p => p.category === 'Respondent') as placeholder}
+                          <option value={placeholder.value}>
+                            {placeholder.label}
+                          </option>
+                        {/each}
+                      </optgroup>
+                    {/if}
+                    {#if availablePlaceholders.filter(p => p.category === 'Custom').length > 0}
+                      <optgroup label="Custom Fields">
+                        {#each availablePlaceholders.filter(p => p.category === 'Custom') as placeholder}
+                          <option value={placeholder.value}>
+                            {placeholder.label}
+                          </option>
+                        {/each}
+                      </optgroup>
+                    {/if}
+                  </select>
+                </div>
+
+                <div class="editor-mode-toggle">
+                  <button
+                    type="button"
+                    class:active={editorMode === "wysiwyg"}
+                    on:click={() => (editorMode = "wysiwyg")}
+                  >
+                    📝 WYSIWYG
+                  </button>
+                  <button
+                    type="button"
+                    class:active={editorMode === "html"}
+                    on:click={() => (editorMode = "html")}
+                  >
+                    &lt;/&gt; HTML
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="email-editor-wrapper">
+              {#if editorsLoading}
+                <div class="editors-loading">
+                  <Spinner size="md" />
+                  <p>Loading editors...</p>
+                </div>
+              {:else}
+                <!-- Always render both editors, toggle visibility with CSS -->
+                <div
+                  bind:this={quillContainer}
+                  class="quill-editor"
+                  style="display: {editorMode === 'wysiwyg' ? 'block' : 'none'}"
+                ></div>
+                <div
+                  bind:this={monacoContainer}
+                  class="monaco-editor"
+                  style="display: {editorMode === 'html' ? 'block' : 'none'}"
+                ></div>
+              {/if}
+            </div>
+          </div>
+        </AccordionSection>
       {/if}
 
       <div class="form-actions">
@@ -1722,4 +1911,84 @@
     width: auto;
     margin-right: 0.5rem;
   }
+  
+  /* Email Template Fields Table */
+  .email-fields-table {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: white;
+  }
+  
+  .email-fields-table table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .email-fields-table th {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #495057;
+    border-bottom: 2px solid var(--color-border);
+  }
+  
+  .email-fields-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .email-fields-table td input {
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+  }
+  
+  .email-fields-table td input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+  
+  .email-fields-table code {
+    display: block;
+    margin-top: 0.25rem;
+    font-family: 'Courier New', monospace;
+  }
+  
+  /* Editor Mode Toggle */
+  .editor-mode-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .editor-mode-toggle button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: white;
+    color: #666;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  
+  .editor-mode-toggle button:not(:last-child) {
+    border-right: 1px solid var(--color-border);
+  }
+  
+  .editor-mode-toggle button.active {
+    background: var(--color-primary);
+    color: white;
+  }
+  
+  .editor-mode-toggle button:hover:not(.active) {
+    background: #f5f5f5;
+  }
 </style>
+
