@@ -121,7 +121,7 @@
     ...(emailTemplateFields || [])
       .map((f) => ({
         value: `__${f.id}__`,
-        label: f.id,
+        label: f.name || f.id,
         category: "Custom"
       }))
   ];
@@ -795,6 +795,7 @@
   function addEmailTemplateField() {
     const newField = {
       id: `field_${Date.now()}`,
+      name: "",
       cs: "",
       en: "",
       de: ""
@@ -1006,89 +1007,6 @@
 
       <!-- Respondents Section -->
       {#if !campaign.is_public}
-        <div class="form-section email-template-section">
-          <div class="section-header">
-            <h2>Email Template</h2>
-            <div class="editor-controls">
-              <div class="placeholder-controls">
-                <label for="placeholder-select">Insert Placeholder:</label>
-                <select
-                  id="placeholder-select"
-                  on:change={(e) => {
-                    insertPlaceholder(e.target.value);
-                    e.target.value = "";
-                  }}
-                >
-                  <option value="">Select a placeholder...</option>
-                  {#each availablePlaceholders as placeholder}
-                    <option value={placeholder.value}
-                      >{placeholder.label}</option
-                    >
-                  {/each}
-                </select>
-              </div>
-              <div class="editor-toggle">
-                <button
-                  type="button"
-                  class="toggle-btn {editorMode === 'wysiwyg' ? 'active' : ''}"
-                  on:click={() => (editorMode = "wysiwyg")}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                  >
-                    <path d="M1 3h14v2H1V3zm0 4h14v2H1V7zm0 4h10v2H1v-2z" />
-                  </svg>
-                  WYSIWYG
-                </button>
-                <button
-                  type="button"
-                  class="toggle-btn {editorMode === 'html' ? 'active' : ''}"
-                  on:click={() => (editorMode = "html")}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                  >
-                    <path
-                      d="M5 3l-3 5 3 5h2L4 8l3-5H5zm6 0l3 5-3 5h-2l3-5-3-5h2z"
-                    />
-                  </svg>
-                  HTML
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="email-editor-wrapper">
-            {#if editorsLoading}
-              <div class="editors-loading">
-                <Spinner size="md" />
-                <p>Loading editors...</p>
-              </div>
-            {:else}
-              <!-- Always render both editors, toggle visibility with CSS -->
-              <div
-                bind:this={quillContainer}
-                class="quill-editor"
-                style="display: {editorMode === 'wysiwyg' ? 'block' : 'none'}"
-              ></div>
-              <div
-                bind:this={monacoContainer}
-                class="monaco-editor"
-                style="display: {editorMode === 'html' ? 'block' : 'none'}"
-              ></div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Respondents Section -->
-      {#if !campaign.is_public}
         <AccordionSection 
           title="Respondents" 
           isOpen={accordionOpen.respondents}
@@ -1269,10 +1187,10 @@
                 <table>
                   <thead>
                     <tr>
-                      <th style="width: 25%;">Placeholder ID</th>
-                      <th style="width: 25%;">Czech (cs)</th>
-                      <th style="width: 25%;">English (en)</th>
-                      <th style="width: 20%;">German (de)</th>
+                      <th style="width: 30%;">Placeholder Name</th>
+                      <th style="width: 23%;">Czech (cs)</th>
+                      <th style="width: 23%;">English (en)</th>
+                      <th style="width: 19%;">German (de)</th>
                       <th style="width: 5%; text-align: center;">Actions</th>
                     </tr>
                   </thead>
@@ -1282,8 +1200,8 @@
                         <td>
                           <input
                             type="text"
-                            bind:value={field.id}
-                            placeholder="e.g. greeting"
+                            bind:value={field.name}
+                            placeholder="e.g. Greeting, Footer, Introduction"
                             style="width: 100%;"
                           />
                           <code style="font-size: 0.75rem; color: #666;">
