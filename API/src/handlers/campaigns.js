@@ -211,6 +211,7 @@ async function getCampaign(campaignId) {
   let title = campaign.title;
   let description = campaign.description;
   let email_template = campaign.email_template;
+  let email_template_fields = campaign.email_template_fields;
   let form_data = campaign.form_data;
   
   try {
@@ -224,6 +225,12 @@ async function getCampaign(campaignId) {
   // email_template is stored as plain HTML string, no parsing needed
   
   try {
+    if (email_template_fields && typeof email_template_fields === 'string') {
+      email_template_fields = JSON.parse(email_template_fields);
+    }
+  } catch (e) {}
+  
+  try {
     if (form_data && typeof form_data === 'string') form_data = JSON.parse(form_data);
   } catch (e) {}
 
@@ -232,13 +239,14 @@ async function getCampaign(campaignId) {
     title,
     description,
     email_template,
+    email_template_fields,
     form_data
   });
 }
 
 async function updateCampaign(event, user, campaignId) {
   const body = parseBody(event);
-  const { title, description, email_template, open_on, close_on, allow_multiple_responses, max_attempts } = body;
+  const { title, description, email_template, email_template_fields, open_on, close_on, allow_multiple_responses, max_attempts } = body;
 
   const updates = [];
   const params = [];
@@ -254,6 +262,10 @@ async function updateCampaign(event, user, campaignId) {
   if (email_template !== undefined) {
     updates.push('email_template = ?');
     params.push(email_template);
+  }
+  if (email_template_fields !== undefined) {
+    updates.push('email_template_fields = ?');
+    params.push(email_template_fields ? JSON.stringify(email_template_fields) : null);
   }
   if (open_on !== undefined) {
     updates.push('open_on = ?');

@@ -1204,9 +1204,6 @@
                             placeholder="e.g. Greeting, Footer, Introduction"
                             style="width: 100%;"
                           />
-                          <code style="font-size: 0.75rem; color: #666;">
-                            {generateFieldPlaceholder(field.id)}
-                          </code>
                         </td>
                         <td>
                           <input
