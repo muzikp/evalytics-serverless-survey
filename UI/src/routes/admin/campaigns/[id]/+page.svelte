@@ -15,6 +15,10 @@
   import Spinner from "$lib/components/Spinner.svelte";
   import ConfigureRespondentFieldsDialog from "$lib/components/ConfigureRespondentFieldsDialog.svelte";
   import AccordionSection from "$lib/components/AccordionSection.svelte";
+  import CampaignGeneralSettings from "$lib/components/CampaignGeneralSettings.svelte";
+  import RespondentsSection from "$lib/components/RespondentsSection.svelte";
+  import EmailPlaceholderFields from "$lib/components/EmailPlaceholderFields.svelte";
+  import EmailTemplateEditor from "$lib/components/EmailTemplateEditor.svelte";
   import { translations_store } from "$lib/i18n/index.js";
   import { toast } from "$lib/toast.js";
 
