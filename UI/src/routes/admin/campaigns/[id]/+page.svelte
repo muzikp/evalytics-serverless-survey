@@ -22,24 +22,6 @@
   import { translations_store } from "$lib/i18n/index.js";
   import { toast } from "$lib/toast.js";
 
-  // Quill, Monaco and their loaders will be imported dynamically in browser only
-  let loader;
-  if (browser) {
-    import("@monaco-editor/loader").then((mod) => {
-      loader = mod.default;
-    });
-  }
-
-  // Quill editor
-  let quillEditor;
-  let quillContainer;
-
-  // Monaco editor
-  let monacoEditor;
-  let monacoContainer;
-  let editorMode = "wysiwyg"; // 'wysiwyg' or 'html'
-  let isUpdatingEditor = false; // Prevent circular updates
-
   $: t = $translations_store;
   $: campaignId = $page.params.id;
   $: isNewCampaign = campaignId === "new";
@@ -76,38 +58,15 @@
   let editorsLoading = false;
   let respondentsLoading = false;
   
+  // Component references
+  let emailEditorComponent;
+  
   // Accordion state
   let accordionOpen = {
     general: true,
     respondents: false,
     email: false
   };
-
-  // Reactive: sync editors when switching modes
-  $: if (
-    editorMode === "html" &&
-    monacoEditor &&
-    quillEditor &&
-    !isUpdatingEditor
-  ) {
-    // Switching to HTML mode - update Monaco with Quill content
-    isUpdatingEditor = true;
-    const html = quillEditor.root.innerHTML;
-    monacoEditor.setValue(html);
-    monacoEditor.layout(); // Force Monaco to recalculate layout
-    isUpdatingEditor = false;
-  } else if (
-    editorMode === "wysiwyg" &&
-    quillEditor &&
-    monacoEditor &&
-    !isUpdatingEditor
-  ) {
-    // Switching to WYSIWYG mode - update Quill with Monaco content
-    isUpdatingEditor = true;
-    const html = monacoEditor.getValue();
-    quillEditor.root.innerHTML = html;
-    isUpdatingEditor = false;
-  }
 
   // Available placeholders for email template - reactive to respondentFields and emailTemplateFields
   $: availablePlaceholders = [
@@ -169,120 +128,9 @@
   });
 
   async function loadEditors() {
-    if (typeof window === "undefined") return;
-
-    editorsLoading = true;
-
-    // Wait for Svelte to render the containers
-    await tick();
-
-    try {
-      // Dynamically import Quill CSS and module (browser only)
-      await import("quill/dist/quill.snow.css");
-      const QuillModule = await import("quill");
-      window.Quill = QuillModule.default;
-
-      // Load Monaco using @monaco-editor/loader (dynamically imported)
-      if (!loader) {
-        const loaderModule = await import("@monaco-editor/loader");
-        loader = loaderModule.default;
-      }
-      const monaco = await loader.init();
-      window.monaco = monaco;
-
-      initializeEditors();
-    } catch (error) {
-      console.error("Failed to load editors:", error);
-      toast.error("Failed to load editors");
-    } finally {
-      editorsLoading = false;
+    if (emailEditorComponent) {
+      await emailEditorComponent.initializeEditors();
     }
-  }
-
-  function initializeEditors() {
-    // Wait a tick to ensure DOM is ready
-    tick().then(() => {
-      console.log("Initializing editors...", {
-        quillContainer: !!quillContainer,
-        monacoContainer: !!monacoContainer,
-        email_template: campaign.email_template?.substring(0, 50),
-        is_public: campaign.is_public,
-      });
-
-      // Initialize Quill
-      if (quillContainer && !quillEditor && window.Quill) {
-        try {
-          quillEditor = new window.Quill(quillContainer, {
-            theme: "snow",
-            modules: {
-              toolbar: [
-                ["bold", "italic", "underline"],
-                ["link"],
-                [{ list: "ordered" }, { list: "bullet" }],
-                [{ header: [1, 2, 3, false] }],
-                ["clean"],
-              ],
-            },
-          });
-
-          console.log("Quill initialized successfully");
-
-          // Set initial content - convert __placeholder__ to badges
-          if (campaign.email_template) {
-            let htmlContent = campaign.email_template;
-
-            // Convert __placeholder__ format to visual badges
-            availablePlaceholders.forEach((ph) => {
-              const regex = new RegExp(
-                ph.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                "g",
-              );
-              htmlContent = htmlContent.replace(
-                regex,
-                `<span class="placeholder-badge" contenteditable="false" data-placeholder="${ph.value}">${ph.label}</span>`,
-              );
-            });
-
-            quillEditor.root.innerHTML = htmlContent;
-            console.log(
-              "Quill content set with placeholders converted to badges",
-            );
-          }
-
-          // Update campaign.email_template on Quill change
-          quillEditor.on("text-change", () => {
-            if (!isUpdatingEditor) {
-              campaign.email_template = quillEditor.root.innerHTML;
-            }
-          });
-        } catch (error) {
-          console.error("Failed to initialize Quill:", error);
-          toast.error("Failed to initialize rich text editor");
-        }
-      }
-
-      // Initialize Monaco
-      if (monacoContainer && !monacoEditor && window.monaco) {
-        monacoEditor = window.monaco.editor.create(monacoContainer, {
-          value: campaign.email_template || "",
-          language: "html",
-          theme: "vs",
-          minimap: { enabled: false },
-          lineNumbers: "on",
-          automaticLayout: true,
-          wordWrap: "on",
-        });
-
-        console.log("Monaco initialized successfully");
-
-        // Update campaign.email_template on Monaco change
-        monacoEditor.onDidChangeModelContent(() => {
-          if (!isUpdatingEditor) {
-            campaign.email_template = monacoEditor.getValue();
-          }
-        });
-      }
-    });
   }
 
   function generateCampaignId() {
@@ -723,44 +571,6 @@
   function removeRespondent(index) {
     respondents = respondents.filter((_, i) => i !== index);
     toast.success("Respondent removed");
-  }
-
-  function insertPlaceholder(placeholder) {
-    if (!placeholder) return;
-
-    // Find the label for this placeholder
-    const placeholderObj = availablePlaceholders.find(
-      (p) => p.value === placeholder,
-    );
-    const label = placeholderObj ? placeholderObj.label : placeholder;
-
-    if (editorMode === "wysiwyg" && quillEditor) {
-      const range = quillEditor.getSelection();
-      const html = `<span class="placeholder-badge" contenteditable="false" data-placeholder="${placeholder}">${label}</span>&nbsp;`;
-
-      if (range) {
-        // Insert at cursor position using clipboard
-        const delta = quillEditor.clipboard.convert({ html });
-        quillEditor.updateContents(delta, "user");
-        quillEditor.setSelection(range.index + 1);
-      } else {
-        const length = quillEditor.getLength();
-        const delta = quillEditor.clipboard.convert({ html });
-        quillEditor.updateContents(delta, "user");
-      }
-      quillEditor.focus();
-    } else if (editorMode === "html" && monacoEditor) {
-      const selection = monacoEditor.getSelection();
-      const id = { major: 1, minor: 1 };
-      const op = {
-        identifier: id,
-        range: selection,
-        text: placeholder,
-        forceMoveMarkers: true,
-      };
-      monacoEditor.executeEdits("insert-placeholder", [op]);
-      monacoEditor.focus();
-    }
   }
 
   function validateRespondentField(value, field) {
