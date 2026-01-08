@@ -212,6 +212,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   
   -- Email šablona
   email_template     JSON NOT NULL COMMENT 'JSON object email šablony s placeholders {{name}}, {{department}}, ...',
+  email_template_fields JSON NULL COMMENT 'Custom email placeholders with multilingual values: [{"id":"greeting","cs":"Dobrý den","en":"Hello"}]',
   
   -- Časový rozsah
   open_on            DATETIME NULL COMMENT 'Datum otevření (NULL = okamžitě)',
@@ -265,6 +266,7 @@ CREATE TABLE IF NOT EXISTS campaign_respondents (
   
   -- Kontakt
   email              VARCHAR(256) NOT NULL COMMENT 'Email respondenta (pro pozvání)',
+  token              VARCHAR(64) NULL COMMENT 'Plaintext token for private campaign URLs',
   email_hash         CHAR(64) NOT NULL COMMENT 'SHA256(email.toLowerCase()) - deduplication, privacy',
   token_hash         VARCHAR(128) NOT NULL COMMENT 'SHA256(random_token) - secure survey URL verification',
   

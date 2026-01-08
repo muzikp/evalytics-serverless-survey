@@ -325,7 +325,7 @@ async function listRespondents(event, user, campaignId) {
 
   // Note: LIMIT and OFFSET must be directly interpolated (not as params) due to MySQL2 driver limitations
   const respondents = await query(
-    `SELECT respondent_id, campaign_id, email, data, created, last_update
+    `SELECT respondent_id, campaign_id, email, token, data, created, last_update
      FROM campaign_respondents
      WHERE campaign_id = ?
      ORDER BY created DESC LIMIT ${limit} OFFSET ${offset}`,

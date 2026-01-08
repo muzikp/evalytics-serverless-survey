@@ -14,6 +14,7 @@
   } from "$lib/api.js";
   import Spinner from "$lib/components/Spinner.svelte";
   import ConfigureRespondentFieldsDialog from "$lib/components/ConfigureRespondentFieldsDialog.svelte";
+  import AccordionSection from "$lib/components/AccordionSection.svelte";
   import { translations_store } from "$lib/i18n/index.js";
   import { toast } from "$lib/toast.js";
 
@@ -60,6 +61,7 @@
   let formVersions = [];
   let respondents = [];
   let respondentFields = [];
+  let emailTemplateFields = []; // Custom placeholders with multilingual values
   let loading = true;
   let saving = false;
   let importing = false;
@@ -69,6 +71,13 @@
   let autoGenerateToken = true;
   let editorsLoading = false;
   let respondentsLoading = false;
+  
+  // Accordion state
+  let accordionOpen = {
+    general: true,
+    respondents: false,
+    email: false
+  };
 
   // Reactive: sync editors when switching modes
   $: if (
@@ -96,22 +105,29 @@
     isUpdatingEditor = false;
   }
 
-  // Available placeholders for email template - reactive to respondentFields
+  // Available placeholders for email template - reactive to respondentFields and emailTemplateFields
   $: availablePlaceholders = [
-    { value: "__email__", label: "Email" },
-    { value: "__name__", label: "Name" },
-    { value: "__link__", label: "Survey Link" },
-    { value: "__campaign_name__", label: "Campaign Name" },
+    { value: "__link__", label: "Survey Link", category: "System" },
+    { value: "__email__", label: "Email", category: "System" },
+    { value: "__name__", label: "Name", category: "System" },
+    { value: "__campaign_name__", label: "Campaign Name", category: "System" },
     ...(respondentFields || [])
       .filter((f) => f.name !== "email" && f.name !== "token")
       .map((f) => ({
         value: `__${f.name}__`,
         label: f.label || f.name,
+        category: "Respondent"
       })),
+    ...(emailTemplateFields || [])
+      .map((f) => ({
+        value: `__${f.id}__`,
+        label: f.id,
+        category: "Custom"
+      }))
   ];
 
   // Check auth
-  $: if (!$auth) {
+  $: if (browser && !$auth) {
     goto("/login");
   }
 
@@ -309,7 +325,6 @@
 
       // Extract email template
       let emailTemplate = data.email_template || "";
-      console.log("Email template from API:", emailTemplate?.substring(0, 100));
       if (typeof emailTemplate === "object" && emailTemplate) {
         if (emailTemplate.invite && emailTemplate.invite.html) {
           emailTemplate = emailTemplate.invite.html;
@@ -317,6 +332,7 @@
           emailTemplate = JSON.stringify(emailTemplate, null, 2);
         }
       }
+      console.log("Email template from API:", emailTemplate?.substring(0, 100));
 
       campaign = {
         name: title,
@@ -334,6 +350,13 @@
             : true,
         email_template: emailTemplate,
       };
+      
+      // Load email template fields
+      if (data.email_template_fields) {
+        emailTemplateFields = Array.isArray(data.email_template_fields) 
+          ? data.email_template_fields 
+          : [];
+      }
 
       // Find form_id from versions
       if (data.version_id && forms.length > 0) {
@@ -397,7 +420,10 @@
       if (items.length > 0) {
         // Extract respondents data
         respondents = items.map((item) => {
-          const result = { email: item.email };
+          const result = { 
+            email: item.email,
+            token: item.token  // Add token from API response
+          };
 
           // Extract data from JSON field
           if (item.data && typeof item.data === "object") {
@@ -436,7 +462,7 @@
                 label: "Token",
                 type: "text",
                 required: false,
-                order: 999,
+                order: 1,
               };
             } else {
               // Custom field - infer type from value
@@ -471,7 +497,7 @@
             label: "Token",
             type: "text",
             required: false,
-            order: 999,
+            order: 1,
           },
         ];
         console.log("No respondents found - using default fields");
@@ -629,6 +655,7 @@
         allow_retries: campaign.allow_retries ? 1 : 0,
         response_persistence: campaign.response_persistence ? 1 : 0,
         email_template: emailTemplateForSave,
+        email_template_fields: emailTemplateFields.length > 0 ? emailTemplateFields : null,
       };
 
       if (isNewCampaign) {
@@ -758,7 +785,38 @@
         return true;
     }
   }
+  
+  // Accordion functions
+  function toggleAccordion(section) {
+    accordionOpen[section] = !accordionOpen[section];
+  }
+  
+  // Email template field functions
+  function addEmailTemplateField() {
+    const newField = {
+      id: `field_${Date.now()}`,
+      cs: "",
+      en: "",
+      de: ""
+    };
+    emailTemplateFields = [...emailTemplateFields, newField];
+  }
+  
+  function removeEmailTemplateField(index) {
+    emailTemplateFields = emailTemplateFields.filter((_, i) => i !== index);
+  }
+  
+  function generateFieldPlaceholder(fieldId) {
+    return `__${fieldId}__`;
+  }
+  
+  // Get survey URL with token
+  function getSurveyUrl(token) {
+    const baseUrl = import.meta.env.VITE_SURVEY_BASE_URL || window.location.origin;
+    return `${baseUrl}/survey/${campaign.public_id}?token=${token}`;
+  }
 </script>
+
 
 <svelte:head>
   <title>{pageTitle} - {t("app.name")}</title>

@@ -393,11 +393,12 @@ const token = crypto.randomBytes(32).toString('hex');
 const emailHash = crypto.createHash('sha256').update(email.toLowerCase()).digest('hex');
 const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 await connection.execute(
-  'INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
+  'INSERT INTO campaign_respondents (respondent_id, campaign_id, email, token, email_hash, token_hash, data, created, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
   [
     'R' + Math.random().toString(36).substring(2, 15).toUpperCase(),
     '4KS624HEW5PBFFSM',
     email,
+    token,  // Add plaintext token
     emailHash,
     tokenHash,
     JSON.stringify({
