@@ -41,6 +41,7 @@
     can_edit_after_submit: false,
     can_reopen_after_submit: true,
     email_template: "",
+    email_title: "",
   };
 
   let forms = [];
@@ -746,9 +747,15 @@
           <EmailTemplateEditor
             bind:this={emailEditorComponent}
             bind:emailTemplate={campaign.email_template}
+            bind:emailTitle={campaign.email_title}
             {availablePlaceholders}
             bind:editorsLoading
+            {emailTemplateFields}
+            {respondents}
+            languages={formLanguages}
+            {campaign}
             on:change={(e) => campaign.email_template = e.detail.value}
+            on:titleChange={(e) => campaign.email_title = e.detail.value}
           />
         </AccordionSection>
       {/if}

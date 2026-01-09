@@ -8,44 +8,29 @@
   const dispatch = createEventDispatcher();
 
   export let emailTemplate = "";
+  export let emailTitle = "";
   export let availablePlaceholders = [];
   export let editorsLoading = false;
   export let emailTemplateFields = [];
   export let respondents = [];
-  export let languages = ["en", "cs", "de"]; // Available languages from form
+  export let languages = ["en", "cs", "de"];
   export let campaign = {};
 
-  let quillEditor;
-  let quillContainer;
   let monacoEditor;
   let monacoContainer;
-  let editorMode = "wysiwyg";
-  let isUpdatingEditor = false;
   let loader;
   let selectedLanguage = "en";
   let selectedRespondentEmail = "";
   let showPreview = false;
+  let emailTitleInput;
 
   $: selectedRespondent = respondents.find(r => r.email === selectedRespondentEmail) || null;
+  $: console.log("Respondents in editor:", respondents.length, respondents.map(r => r.email));
 
   if (browser) {
     import("@monaco-editor/loader").then((mod) => {
       loader = mod.default;
     });
-  }
-
-  // Sync editors when switching modes
-  $: if (editorMode === "html" && monacoEditor && quillEditor && !isUpdatingEditor) {
-    isUpdatingEditor = true;
-    const html = quillEditor.root.innerHTML;
-    monacoEditor.setValue(html);
-    monacoEditor.layout();
-    isUpdatingEditor = false;
-  } else if (editorMode === "wysiwyg" && quillEditor && monacoEditor && !isUpdatingEditor) {
-    isUpdatingEditor = true;
-    const html = monacoEditor.getValue();
-    quillEditor.root.innerHTML = html;
-    isUpdatingEditor = false;
   }
 
   export async function initializeEditors() {
@@ -55,11 +40,6 @@
     await tick();
 
     try {
-      // Import Quill
-      await import("quill/dist/quill.snow.css");
-      const QuillModule = await import("quill");
-      window.Quill = QuillModule.default;
-
       // Load Monaco
       if (!loader) {
         const loaderModule = await import("@monaco-editor/loader");
@@ -70,46 +50,7 @@
 
       await tick();
 
-      // Initialize Quill
-      if (quillContainer && !quillEditor && window.Quill) {
-        quillEditor = new window.Quill(quillContainer, {
-          theme: "snow",
-          readOnly: false,
-          modules: {
-            toolbar: [
-              ["bold", "italic", "underline"],
-              ["link"],
-              [{ list: "ordered" }, { list: "bullet" }],
-              [{ header: [1, 2, 3, false] }],
-              ["clean"],
-            ],
-          },
-        });
-
-        if (emailTemplate) {
-          let htmlContent = emailTemplate;
-          availablePlaceholders.forEach((ph) => {
-            const regex = new RegExp(
-              ph.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-              "g"
-            );
-            htmlContent = htmlContent.replace(
-              regex,
-              `<span class="placeholder-badge" contenteditable="false" data-placeholder="${ph.value}">${ph.label}</span>`
-            );
-          });
-          quillEditor.root.innerHTML = htmlContent;
-        }
-
-        quillEditor.on("text-change", () => {
-          if (!isUpdatingEditor) {
-            emailTemplate = quillEditor.root.innerHTML;
-            dispatch("change", { value: emailTemplate });
-          }
-        });
-      }
-
-      // Initialize Monaco
+      // Initialize Monaco only
       if (monacoContainer && !monacoEditor && window.monaco) {
         monacoEditor = window.monaco.editor.create(monacoContainer, {
           value: emailTemplate || "",
@@ -117,33 +58,39 @@
           theme: "vs",
           minimap: { enabled: false },
           lineNumbers: "on",
-          readOnly: false,
           wordWrap: "on",
+          automaticLayout: true,
         });
 
         monacoEditor.onDidChangeModelContent(() => {
-          if (!isUpdatingEditor) {
-            emailTemplate = monacoEditor.getValue();
-            dispatch("change", { value: emailTemplate });
-          }
+          emailTemplate = monacoEditor.getValue();
+          dispatch("change", { value: emailTemplate });
         });
       }
     } catch (error) {
-      console.error("Failed to load editors:", error);
+      console.error("Failed to load editor:", error);
     } finally {
       editorsLoading = false;
     }
   }
 
-  function insertPlaceholder(placeholder) {
+  function insertPlaceholder(placeholder, target = "body") {
     if (!placeholder) return;
 
-    if (editorMode === "wysiwyg" && quillEditor) {
-      const range = quillEditor.getSelection(true);
-      quillEditor.insertText(range.index, placeholder);
-      quillEditor.setSelection(range.index + placeholder.length);
-      quillEditor.focus();
-    } else if (editorMode === "html" && monacoEditor) {
+    if (target === "title" && emailTitleInput) {
+      const start = emailTitleInput.selectionStart;
+      const end = emailTitleInput.selectionEnd;
+      const before = emailTitle.substring(0, start);
+      const after = emailTitle.substring(end);
+      emailTitle = before + placeholder + after;
+      dispatch("titleChange", { value: emailTitle });
+      
+      // Set cursor position after placeholder
+      tick().then(() => {
+        emailTitleInput.focus();
+        emailTitleInput.setSelectionRange(start + placeholder.length, start + placeholder.length);
+      });
+    } else if (target === "body" && monacoEditor) {
       const selection = monacoEditor.getSelection();
       const id = { major: 1, minor: 1 };
       const op = {
@@ -179,14 +126,58 @@ function handlePreview() {
 />
 
 <div class="email-template-section">
+  <!-- Email Title -->
+  <div class="form-group">
+    <div class="title-header">
+      <label for="email-title">Email Subject *</label>
+      <select
+        class="placeholder-select-inline"
+        on:change={(e) => {
+          insertPlaceholder(e.target.value, "title");
+          e.target.value = "";
+        }}
+      >
+        <option value="">+ Insert Placeholder</option>
+        {#each availablePlaceholders.filter(p => p.category === 'System') as placeholder}
+          <option value={placeholder.value}>{placeholder.label}</option>
+        {/each}
+        {#if availablePlaceholders.filter(p => p.category === 'Respondent').length > 0}
+          <optgroup label="Respondent">
+            {#each availablePlaceholders.filter(p => p.category === 'Respondent') as placeholder}
+              <option value={placeholder.value}>{placeholder.label}</option>
+            {/each}
+          </optgroup>
+        {/if}
+        {#if availablePlaceholders.filter(p => p.category === 'Custom').length > 0}
+          <optgroup label="Custom">
+            {#each availablePlaceholders.filter(p => p.category === 'Custom') as placeholder}
+              <option value={placeholder.value}>{placeholder.label}</option>
+            {/each}
+          </optgroup>
+        {/if}
+      </select>
+    </div>
+    <input
+      id="email-title"
+      type="text"
+      bind:this={emailTitleInput}
+      bind:value={emailTitle}
+      on:input={(e) => dispatch("titleChange", { value: e.target.value })}
+      placeholder="Enter email subject line"
+      required
+    />
+  </div>
+
+  <!-- Email Body Controls -->
   <div class="section-header">
+    <h3>Email Body (HTML)</h3>
     <div class="editor-controls">
       <div class="placeholder-controls">
         <label for="placeholder-select">Insert Placeholder:</label>
         <select
           id="placeholder-select"
           on:change={(e) => {
-            insertPlaceholder(e.target.value);
+            insertPlaceholder(e.target.value, "body");
             e.target.value = "";
           }}
         >
@@ -254,42 +245,20 @@ function handlePreview() {
       >
         👁️ Preview Email
       </button>
-
-      <div class="editor-mode-toggle">
-        <button
-          type="button"
-          class:active={editorMode === "wysiwyg"}
-          on:click={() => (editorMode = "wysiwyg")}
-        >
-          📝 WYSIWYG
-        </button>
-        <button
-          type="button"
-          class:active={editorMode === "html"}
-          on:click={() => (editorMode = "html")}
-        >
-          &lt;/&gt; HTML
-        </button>
-      </div>
     </div>
   </div>
 
+  <!-- Monaco Editor -->
   <div class="email-editor-wrapper">
     {#if editorsLoading}
       <div class="editors-loading">
         <Spinner size="md" />
-        <p>Loading editors...</p>
+        <p>Loading editor...</p>
       </div>
     {:else}
       <div
-        bind:this={quillContainer}
-        class="quill-editor"
-        style="display: {editorMode === 'wysiwyg' ? 'block' : 'none'}"
-      ></div>
-      <div
         bind:this={monacoContainer}
         class="monaco-editor"
-        style="display: {editorMode === 'html' ? 'block' : 'none'}"
       ></div>
     {/if}
   </div>
@@ -306,6 +275,46 @@ function handlePreview() {
     border-bottom: 1px solid var(--color-border);
   }
 
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .title-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .title-header label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .placeholder-select-inline {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: white;
+    cursor: pointer;
+  }
+
+  .form-group input[type="text"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.95rem;
+  }
+
+  .form-group input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+  }
+
   .section-header {
     display: flex;
     justify-content: space-between;
@@ -313,12 +322,18 @@ function handlePreview() {
     margin-bottom: 1rem;
   }
 
+  .section-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+  }
+
   .editor-controls {
     display: flex;
     gap: 1rem;
     align-items: center;
     flex-wrap: wrap;
-    width: 100%;
   }
 
   .placeholder-controls {
@@ -384,69 +399,16 @@ function handlePreview() {
     cursor: not-allowed;
   }
 
-  .editor-mode-toggle {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .editor-mode-toggle button {
-    padding: 0.5rem 1rem;
-    border: none;
-    background: white;
-    color: #666;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s;
-  }
-
-  .editor-mode-toggle button:not(:last-child) {
-    border-right: 1px solid var(--color-border);
-  }
-
-  .editor-mode-toggle button.active {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .editor-mode-toggle button:hover:not(.active) {
-    background: #f5f5f5;
-  }
-
-  .email-editor-wrapper {
-    color: #666;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s;
-  }
-
-  .editor-mode-toggle button:not(:last-child) {
-    border-right: 1px solid var(--color-border);
-  }
-
-  .editor-mode-toggle button.active {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .editor-mode-toggle button:hover:not(.active) {
-    background: #f5f5f5;
-  }
-
   .email-editor-wrapper {
     background: white;
     border: 1px solid var(--color-border);
     border-radius: 4px;
-    min-height: 400px;
+    min-height: 500px;
   }
 
-  .quill-editor,
   .monaco-editor {
-    min-height: 400px;
+    min-height: 500px;
+    height: 500px;
   }
 
   .editors-loading {
@@ -454,7 +416,8 @@ function handlePreview() {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 400px;
+    min-height: 500px;
     gap: 1rem;
   }
 </style>
+
