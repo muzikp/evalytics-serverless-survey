@@ -677,146 +677,13 @@
         isOpen={accordionOpen.general}
         onToggle={() => toggleAccordion('general')}
       >
-        <div class="form-group">
-          <label for="name">Campaign Name *</label>
-          <input
-            id="name"
-            type="text"
-            bind:value={campaign.name}
-            required
-            placeholder="Enter campaign name"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="public_id">Public Name</label>
-          <input
-            id="public_id"
-            type="text"
-            bind:value={campaign.public_id}
-            placeholder="URL-friendly name (e.g. customer-satisfaction-2026)"
-          />
-          <small style="color: #666;"
-            >If empty, form ID will be used in the survey URL</small
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="description">Description</label>
-          <textarea
-            id="description"
-            bind:value={campaign.description}
-            rows="3"
-            placeholder="Internal notes for this campaign (optional)"
-          ></textarea>
-        </div>
-        
-        <div class="form-group">
-          <label for="form">Form *</label>
-          <select id="form" bind:value={campaign.form_id} required>
-            <option value="">Select a form...</option>
-            {#each forms as form}
-              <option value={form.form_id}>{form.name}</option>
-            {/each}
-          </select>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            Select the survey form for this campaign
-          </small>
-        </div>
-
-        {#if campaign.form_id && formVersions.length > 0}
-          <div class="form-group">
-            <label for="version">Form Version *</label>
-            <select id="version" bind:value={campaign.version_id} required>
-              {#each formVersions as version}
-                <option value={version.version_id}>
-                  v{version.version}
-                  {version.version_description
-                    ? `- ${version.version_description}`
-                    : ""}
-                </option>
-              {/each}
-            </select>
-            {#if formVersions.length === 1}
-              <small style="color: #666; display: block; margin-top: 0.25rem;">
-                Only one version available
-              </small>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="start_date">Start Date</label>
-            <input id="start_date" type="date" bind:value={campaign.open_on} />
-          </div>
-
-          <div class="form-group">
-            <label for="end_date">End Date</label>
-            <input id="end_date" type="date" bind:value={campaign.close_on} />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <input type="checkbox" bind:checked={campaign.is_public} />
-            Public Campaign
-          </label>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            If enabled, anyone with the link can access the survey (no email invitations)
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <input type="checkbox" bind:checked={campaign.allow_retries} />
-            Allow Multiple Responses
-          </label>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            If enabled, respondents can submit multiple responses
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <input
-              type="checkbox"
-              bind:checked={campaign.response_persistence}
-            />
-            Save Progress Automatically
-          </label>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            If enabled, respondents will see their previous answers when reopening
-            the survey
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <input
-              type="checkbox"
-              bind:checked={campaign.can_edit_after_submit}
-            />
-            Allow editing after submit
-          </label>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            If enabled, respondents can reopen and edit their submitted responses
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label>
-            <input
-              type="checkbox"
-              bind:checked={campaign.can_reopen_after_submit}
-            />
-            Can reopen after submit
-          </label>
-          <small style="color: #666; display: block; margin-top: 0.25rem;">
-            If disabled, tokens will be invalidated after submission and redirect
-            to homepage
-          </small>
-        </div>
+        <CampaignGeneralSettings
+          bind:campaign
+          {forms}
+          {formVersions}
+          {isNewCampaign}
+          {generatedCampaignId}
+        />
       </AccordionSection>
 
       <!-- Respondents Section -->
@@ -826,150 +693,19 @@
           isOpen={accordionOpen.respondents}
           onToggle={() => toggleAccordion('respondents')}
         >
-          <p style="color: #666; margin-bottom: 1rem;">
-            Add respondents who will receive survey invitations
-          </p>
-
-          <div class="respondent-actions">
-            <button
-              type="button"
-              class="btn-primary"
-              on:click={handleConfigureFields}
-            >
-              ⚙️ Configure Fields
-            </button>
-            <button
-              type="button"
-              class="btn-primary"
-              on:click={handleImportRespondents}
-              disabled={importing || respondentFields.length === 0}
-            >
-              {#if importing}<span class="spinner-small"></span>{/if}
-              📥 Import
-            </button>
-            <button
-              type="button"
-              class="btn-primary"
-              on:click={handleAddRespondentRow}
-              disabled={respondentFields.length === 0}
-            >
-              ➕ Add Row
-            </button>
-          </div>
-
-          <div class="form-group" style="margin-top: 1rem;">
-            <label>
-              <input type="checkbox" bind:checked={autoGenerateToken} />
-              Automatically generate tokens for new respondents
-            </label>
-            <small style="color: #666; display: block; margin-top: 0.25rem;">
-              When enabled, tokens will be auto-generated when adding new rows
-            </small>
-          </div>
-
-          {#if respondentFields.length === 0}
-            <div class="empty-state">
-              <p style="color: #999; font-style: italic; margin-top: 1rem;">
-                Configure fields first to define the structure of your
-                respondent table
-              </p>
-            </div>
-          {:else if respondentsLoading}
-            <div class="loading-state">
-              <Spinner size="md" />
-              <p>Loading respondents...</p>
-            </div>
-          {:else if respondents.length > 0}
-            <div class="respondents-table">
-              <table>
-                <thead>
-                  <tr>
-                    {#each respondentFields as field}
-                      <th>
-                        {field.label}
-                        {#if field.required}<span style="color: #e53935;"
-                            >*</span
-                          >{/if}
-                      </th>
-                    {/each}
-                    <th style="width: 100px; text-align: center;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each respondents as respondent, index}
-                    <tr>
-                      {#each respondentFields as field}
-                        <td>
-                          <input
-                            type={field.type}
-                            bind:value={respondent[field.name]}
-                            required={field.required}
-                            class:invalid={!validateRespondentField(
-                              respondent[field.name],
-                              field,
-                            )}
-                            placeholder={field.label}
-                          />
-                        </td>
-                      {/each}
-                      <td class="action-buttons">
-                        <button
-                          type="button"
-                          class="btn-icon"
-                          on:click={() => copySurveyLink(respondent)}
-                          title="Copy survey link"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <rect
-                              x="2"
-                              y="2"
-                              width="8"
-                              height="10"
-                              rx="1"
-                              stroke="currentColor"
-                              fill="none"
-                              stroke-width="1.5"
-                            />
-                            <path
-                              d="M6 2V1C6 0.4 6.4 0 7 0H13C13.6 0 14 0.4 14 1V11C14 11.6 13.6 12 13 12H12"
-                              stroke="currentColor"
-                              fill="none"
-                              stroke-width="1.5"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          class="btn-icon"
-                          on:click={() => removeRespondent(index)}
-                          title="Remove respondent"
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-              <p style="margin-top: 0.5rem; color: #666;">
-                {respondents.length} respondent{respondents.length !== 1
-                  ? "s"
-                  : ""}
-              </p>
-            </div>
-          {:else}
-            <div class="empty-state">
-              <p style="color: #999; font-style: italic; margin-top: 1rem;">
-                Click "Add Row" to start adding respondents
-              </p>
-            </div>
-          {/if}
+          <RespondentsSection
+            bind:respondents
+            bind:respondentFields
+            bind:autoGenerateToken
+            {respondentsLoading}
+            {importing}
+            {campaign}
+            on:configure={handleConfigureFields}
+            on:import={handleImportRespondents}
+            on:addRow={handleAddRespondentRow}
+            on:remove={(e) => removeRespondent(e.detail.index)}
+            on:copyLink={(e) => copySurveyLink(e.detail.respondent)}
+          />
         </AccordionSection>
         
         <!-- Email Template Section -->
