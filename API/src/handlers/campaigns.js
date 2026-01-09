@@ -112,7 +112,7 @@ async function listCampaigns(event, user) {
 
 async function createCampaign(event, user) {
   const body = parseBody(event);
-  const { campaign_id, version_id, public_id, title, description, email_template, open_on, close_on, is_public, allow_retries, allow_multiple_responses, respondents } = body;
+  const { campaign_id, version_id, public_id, title, description, email_template, email_template_fields, respondent_fields, open_on, close_on, is_public, allow_retries, allow_multiple_responses, response_persistence, respondents } = body;
 
   if (!version_id || !title) {
     return errorResponse(400, 'MISSING_FIELDS', 'version_id and title are required');
@@ -130,8 +130,8 @@ async function createCampaign(event, user) {
   const now = formatDateTime();
 
   await query(
-    `INSERT INTO campaigns (campaign_id, version_id, public_id, title, description, email_template, open_on, close_on, is_public, allow_retries, allow_multiple_responses, created, last_update, created_by, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO campaigns (campaign_id, version_id, public_id, title, description, email_template, email_template_fields, respondent_fields, open_on, close_on, is_public, allow_retries, allow_multiple_responses, response_persistence, created, last_update, created_by, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       campaignId,
       version_id,
@@ -139,11 +139,14 @@ async function createCampaign(event, user) {
       JSON.stringify(title),
       description ? JSON.stringify(description) : null,
       email_template || null,
+      email_template_fields ? JSON.stringify(email_template_fields) : null,
+      respondent_fields ? JSON.stringify(respondent_fields) : null,
       open_on || null,
       close_on || null,
       is_public || 0,
       allow_retries !== undefined ? allow_retries : 1,
       allow_multiple_responses || 0,
+      response_persistence || 0,
       now,
       now,
       user.user_id,
@@ -167,9 +170,6 @@ async function createCampaign(event, user) {
           customData[key] = resp[key];
         }
       });
-      
-      // Store token in data field for later retrieval
-      customData.token = token;
       
       await query(
         `INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update)
@@ -210,8 +210,9 @@ async function getCampaign(campaignId) {
   // Parse JSON fields safely
   let title = campaign.title;
   let description = campaign.description;
-  let email_template = campaign.email_template;
+  let email_template = campaign.email_template;  // Now JSON column with title and body
   let email_template_fields = campaign.email_template_fields;
+  let respondent_fields = campaign.respondent_fields;
   let form_data = campaign.form_data;
   
   try {
@@ -222,13 +223,27 @@ async function getCampaign(campaignId) {
     if (description && typeof description === 'string') description = JSON.parse(description);
   } catch (e) {}
   
-  // email_template is stored as plain HTML string, no parsing needed
+  // email_template is JSON column - MySQL driver already parses it
+  // But if it's a string, parse it
+  try {
+    if (email_template && typeof email_template === 'string') {
+      email_template = JSON.parse(email_template);
+    }
+  } catch (e) {}
   
   try {
     if (email_template_fields && typeof email_template_fields === 'string') {
       email_template_fields = JSON.parse(email_template_fields);
     }
   } catch (e) {}
+  
+  try {
+    if (respondent_fields && typeof respondent_fields === 'string') {
+      respondent_fields = JSON.parse(respondent_fields);
+    }
+  } catch (e) {}
+  
+  console.log('getCampaign returning respondent_fields:', JSON.stringify(respondent_fields));
   
   try {
     if (form_data && typeof form_data === 'string') form_data = JSON.parse(form_data);
@@ -240,13 +255,21 @@ async function getCampaign(campaignId) {
     description,
     email_template,
     email_template_fields,
+    respondent_fields,
     form_data
   });
 }
 
 async function updateCampaign(event, user, campaignId) {
   const body = parseBody(event);
-  const { title, description, email_template, email_template_fields, open_on, close_on, allow_multiple_responses, max_attempts } = body;
+  const { title, description, email_template, email_template_fields, respondent_fields, open_on, close_on, allow_multiple_responses, max_attempts, respondents } = body;
+
+  console.log('=== UPDATE CAMPAIGN ===');
+  console.log('Campaign ID:', campaignId);
+  console.log('Respondents in payload:', respondents ? respondents.length : 'none');
+  if (respondents && respondents.length > 0) {
+    console.log('First respondent:', JSON.stringify(respondents[0], null, 2));
+  }
 
   const updates = [];
   const params = [];
@@ -267,6 +290,12 @@ async function updateCampaign(event, user, campaignId) {
     updates.push('email_template_fields = ?');
     params.push(email_template_fields ? JSON.stringify(email_template_fields) : null);
   }
+  if (body.respondent_fields !== undefined) {
+    updates.push('respondent_fields = ?');
+    const fieldsToSave = body.respondent_fields ? JSON.stringify(body.respondent_fields) : null;
+    console.log('Saving respondent_fields:', fieldsToSave);
+    params.push(fieldsToSave);
+  }
   if (open_on !== undefined) {
     updates.push('open_on = ?');
     params.push(open_on);
@@ -284,22 +313,81 @@ async function updateCampaign(event, user, campaignId) {
     params.push(max_attempts);
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && !respondents) {
     return errorResponse(400, 'NO_UPDATES', 'No fields to update');
   }
 
-  updates.push('last_update = NOW()');
-  updates.push('last_modified_by = ?');
-  params.push(user.user_id);
-  params.push(campaignId);
+  // Update campaign metadata if there are updates
+  if (updates.length > 0) {
+    updates.push('last_update = NOW()');
+    updates.push('last_modified_by = ?');
+    params.push(user.user_id);
+    params.push(campaignId);
 
-  const result = await query(
-    `UPDATE campaigns SET ${updates.join(', ')} WHERE campaign_id = ?`,
-    params
-  );
+    const result = await query(
+      `UPDATE campaigns SET ${updates.join(', ')} WHERE campaign_id = ?`,
+      params
+    );
 
-  if (result.affectedRows === 0) {
-    return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
+    if (result.affectedRows === 0) {
+      return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
+    }
+  }
+
+  // Update respondents if provided
+  if (respondents && Array.isArray(respondents) && respondents.length > 0) {
+    const crypto = await import('crypto');
+    const now = formatDateTime();
+    
+    // Get existing respondents to update or delete
+    const existing = await query(
+      'SELECT respondent_id, email FROM campaign_respondents WHERE campaign_id = ?',
+      [campaignId]
+    );
+    
+    const existingMap = new Map(existing.map(r => [r.email, r.respondent_id]));
+    const updatedEmails = new Set();
+    
+    // Update or insert respondents
+    for (const resp of respondents) {
+      updatedEmails.add(resp.email);
+      const respondentId = existingMap.get(resp.email) || generateId(32);
+      const token = resp.token || generateToken(64);
+      const emailHash = crypto.createHash('sha256').update(resp.email).digest('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      
+      // Extract custom fields (all fields except email, token, respondent_id)
+      const customData = {};
+      Object.keys(resp).forEach(key => {
+        if (key !== 'email' && key !== 'token' && key !== 'respondent_id') {
+          customData[key] = resp[key];
+        }
+      });
+      
+      if (existingMap.has(resp.email)) {
+        // Update existing respondent
+        await query(
+          `UPDATE campaign_respondents 
+           SET data = ?, last_update = ? 
+           WHERE respondent_id = ?`,
+          [JSON.stringify(customData), now, respondentId]
+        );
+      } else {
+        // Insert new respondent
+        await query(
+          `INSERT INTO campaign_respondents (respondent_id, campaign_id, email, email_hash, token_hash, data, created, last_update)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [respondentId, campaignId, resp.email, emailHash, tokenHash, JSON.stringify(customData), now, now]
+        );
+      }
+    }
+    
+    // Delete respondents that were removed
+    for (const [email, respondentId] of existingMap.entries()) {
+      if (!updatedEmails.has(email)) {
+        await query('DELETE FROM campaign_respondents WHERE respondent_id = ?', [respondentId]);
+      }
+    }
   }
 
   return await getCampaign(campaignId);
