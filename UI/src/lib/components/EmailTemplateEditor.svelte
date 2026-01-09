@@ -288,50 +288,7 @@ function handlePreview() {
       ></div>
       <div
         bind:this={monacoContainer}
-   
-
-  .control-group {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .control-group label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .control-select {
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    font-size: 0.875rem;
-    min-width: 150px;
-  }
-
-  .btn-preview {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--color-primary);
-    background: white;
-    color: var(--color-primary);
-    border-radius: 4px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .btn-preview:hover:not(:disabled) {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .btn-preview:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }     class="monaco-editor"
+        class="monaco-editor"
         style="display: {editorMode === 'html' ? 'block' : 'none'}"
       ></div>
     {/if}
@@ -384,6 +341,49 @@ function handlePreview() {
     min-width: 200px;
   }
 
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .control-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .control-select {
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    min-width: 150px;
+  }
+
+  .btn-preview {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-primary);
+    background: white;
+    color: var(--color-primary);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-preview:hover:not(:disabled) {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-preview:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .editor-mode-toggle {
     display: flex;
     gap: 0;
@@ -396,6 +396,27 @@ function handlePreview() {
     padding: 0.5rem 1rem;
     border: none;
     background: white;
+    color: #666;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .editor-mode-toggle button:not(:last-child) {
+    border-right: 1px solid var(--color-border);
+  }
+
+  .editor-mode-toggle button.active {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .editor-mode-toggle button:hover:not(.active) {
+    background: #f5f5f5;
+  }
+
+  .email-editor-wrapper {
     color: #666;
     cursor: pointer;
     font-size: 0.875rem;
