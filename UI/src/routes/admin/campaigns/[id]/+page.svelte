@@ -978,173 +978,19 @@
           isOpen={accordionOpen.email}
           onToggle={() => toggleAccordion('email')}
         >
-          
-          <!-- Custom Placeholders Table -->
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-              <label style="margin: 0;">Custom Email Placeholders</label>
-              <button
-                type="button"
-                class="btn-secondary"
-                style="padding: 0.375rem 0.75rem; font-size: 0.875rem;"
-                on:click={addEmailTemplateField}
-              >
-                ➕ Add Field
-              </button>
-            </div>
-            <small style="color: #666; display: block; margin-bottom: 1rem;">
-              Create custom placeholders with translations for different languages
-            </small>
-            
-            {#if emailTemplateFields.length > 0}
-              <div class="email-fields-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style="width: 30%;">Placeholder Name</th>
-                      <th style="width: 23%;">Czech (cs)</th>
-                      <th style="width: 23%;">English (en)</th>
-                      <th style="width: 19%;">German (de)</th>
-                      <th style="width: 5%; text-align: center;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each emailTemplateFields as field, index}
-                      <tr>
-                        <td>
-                          <input
-                            type="text"
-                            bind:value={field.name}
-                            placeholder="e.g. Greeting, Footer, Introduction"
-                            style="width: 100%;"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            bind:value={field.cs}
-                            placeholder="Dobrý den"
-                            style="width: 100%;"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            bind:value={field.en}
-                            placeholder="Hello"
-                            style="width: 100%;"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            bind:value={field.de}
-                            placeholder="Guten Tag"
-                            style="width: 100%;"
-                          />
-                        </td>
-                        <td style="text-align: center;">
-                          <button
-                            type="button"
-                            class="btn-icon"
-                            on:click={() => removeEmailTemplateField(index)}
-                            title="Remove field"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {:else}
-              <p style="color: #999; font-style: italic; padding: 1rem; background: #f9f9f9; border-radius: 4px;">
-                No custom placeholders defined. Click "Add Field" to create one.
-              </p>
-            {/if}
-          </div>
+          <EmailPlaceholderFields
+            bind:emailTemplateFields
+            on:add={addEmailTemplateField}
+            on:remove={(e) => removeEmailTemplateField(e.detail.index)}
+          />
 
-          <!-- Email Template Editor -->
-          <div class="form-section email-template-section">
-            <div class="section-header">
-              <div class="editor-controls">
-                <div class="placeholder-controls">
-                  <label for="placeholder-select">Insert Placeholder:</label>
-                  <select
-                    id="placeholder-select"
-                    on:change={(e) => {
-                      insertPlaceholder(e.target.value);
-                      e.target.value = "";
-                    }}
-                  >
-                    <option value="">-- Select placeholder --</option>
-                    {#each availablePlaceholders.filter(p => p.category === 'System') as placeholder}
-                      <option value={placeholder.value}>
-                        {placeholder.label} ({placeholder.category})
-                      </option>
-                    {/each}
-                    {#if availablePlaceholders.filter(p => p.category === 'Respondent').length > 0}
-                      <optgroup label="Respondent Attributes">
-                        {#each availablePlaceholders.filter(p => p.category === 'Respondent') as placeholder}
-                          <option value={placeholder.value}>
-                            {placeholder.label}
-                          </option>
-                        {/each}
-                      </optgroup>
-                    {/if}
-                    {#if availablePlaceholders.filter(p => p.category === 'Custom').length > 0}
-                      <optgroup label="Custom Fields">
-                        {#each availablePlaceholders.filter(p => p.category === 'Custom') as placeholder}
-                          <option value={placeholder.value}>
-                            {placeholder.label}
-                          </option>
-                        {/each}
-                      </optgroup>
-                    {/if}
-                  </select>
-                </div>
-
-                <div class="editor-mode-toggle">
-                  <button
-                    type="button"
-                    class:active={editorMode === "wysiwyg"}
-                    on:click={() => (editorMode = "wysiwyg")}
-                  >
-                    📝 WYSIWYG
-                  </button>
-                  <button
-                    type="button"
-                    class:active={editorMode === "html"}
-                    on:click={() => (editorMode = "html")}
-                  >
-                    &lt;/&gt; HTML
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="email-editor-wrapper">
-              {#if editorsLoading}
-                <div class="editors-loading">
-                  <Spinner size="md" />
-                  <p>Loading editors...</p>
-                </div>
-              {:else}
-                <!-- Always render both editors, toggle visibility with CSS -->
-                <div
-                  bind:this={quillContainer}
-                  class="quill-editor"
-                  style="display: {editorMode === 'wysiwyg' ? 'block' : 'none'}"
-                ></div>
-                <div
-                  bind:this={monacoContainer}
-                  class="monaco-editor"
-                  style="display: {editorMode === 'html' ? 'block' : 'none'}"
-                ></div>
-              {/if}
-            </div>
-          </div>
+          <EmailTemplateEditor
+            bind:this={emailEditorComponent}
+            bind:emailTemplate={campaign.email_template}
+            {availablePlaceholders}
+            bind:editorsLoading
+            on:change={(e) => campaign.email_template = e.detail.value}
+          />
         </AccordionSection>
       {/if}
 
