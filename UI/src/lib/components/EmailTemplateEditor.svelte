@@ -3,12 +3,17 @@
   import { browser } from "$app/environment";
   import { createEventDispatcher } from "svelte";
   import Spinner from "./Spinner.svelte";
+  import EmailPreviewModal from "./EmailPreviewModal.svelte";
 
   const dispatch = createEventDispatcher();
 
   export let emailTemplate = "";
   export let availablePlaceholders = [];
   export let editorsLoading = false;
+  export let emailTemplateFields = [];
+  export let respondents = [];
+  export let languages = ["en", "cs", "de"]; // Available languages from form
+  export let campaign = {};
 
   let quillEditor;
   let quillContainer;
@@ -17,6 +22,11 @@
   let editorMode = "wysiwyg";
   let isUpdatingEditor = false;
   let loader;
+  let selectedLanguage = "en";
+  let selectedRespondentEmail = "";
+  let showPreview = false;
+
+  $: selectedRespondent = respondents.find(r => r.email === selectedRespondentEmail) || null;
 
   if (browser) {
     import("@monaco-editor/loader").then((mod) => {
@@ -64,6 +74,7 @@
       if (quillContainer && !quillEditor && window.Quill) {
         quillEditor = new window.Quill(quillContainer, {
           theme: "snow",
+          readOnly: false,
           modules: {
             toolbar: [
               ["bold", "italic", "underline"],
@@ -106,6 +117,7 @@
           theme: "vs",
           minimap: { enabled: false },
           lineNumbers: "on",
+          readOnly: false,
           wordWrap: "on",
         });
 
@@ -144,6 +156,9 @@
       monacoEditor.focus();
     }
   }
+function handlePreview() {
+    showPreview = true;
+  }
 
   onMount(() => {
     return () => {
@@ -153,6 +168,15 @@
     };
   });
 </script>
+
+<EmailPreviewModal
+  bind:show={showPreview}
+  {emailTemplate}
+  {emailTemplateFields}
+  {selectedLanguage}
+  {selectedRespondent}
+  {campaign}
+/>
 
 <div class="email-template-section">
   <div class="section-header">
@@ -193,6 +217,44 @@
         </select>
       </div>
 
+      <div class="control-group">
+        <label for="language-select">Language:</label>
+        <select
+          id="language-select"
+          bind:value={selectedLanguage}
+          class="control-select"
+        >
+          {#each languages as lang}
+            <option value={lang}>{lang.toUpperCase()}</option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="respondent-select">Preview Respondent:</label>
+        <select
+          id="respondent-select"
+          bind:value={selectedRespondentEmail}
+          class="control-select"
+        >
+          <option value="">-- Select respondent --</option>
+          {#each respondents as respondent}
+            <option value={respondent.email}>
+              {respondent.email || respondent.name || "Unnamed"}
+            </option>
+          {/each}
+        </select>
+      </div>
+
+      <button
+        type="button"
+        class="btn-preview"
+        on:click={handlePreview}
+        disabled={!emailTemplate}
+      >
+        👁️ Preview Email
+      </button>
+
       <div class="editor-mode-toggle">
         <button
           type="button"
@@ -226,7 +288,50 @@
       ></div>
       <div
         bind:this={monacoContainer}
-        class="monaco-editor"
+   
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .control-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .control-select {
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    min-width: 150px;
+  }
+
+  .btn-preview {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-primary);
+    background: white;
+    color: var(--color-primary);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-preview:hover:not(:disabled) {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-preview:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }     class="monaco-editor"
         style="display: {editorMode === 'html' ? 'block' : 'none'}"
       ></div>
     {/if}

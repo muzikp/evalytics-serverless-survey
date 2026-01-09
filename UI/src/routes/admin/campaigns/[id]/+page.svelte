@@ -57,6 +57,7 @@
   let autoGenerateToken = true;
   let editorsLoading = false;
   let respondentsLoading = false;
+  let formLanguages = ["en", "cs", "de"]; // Languages from selected form version
   
   // Component references
   let emailEditorComponent;
@@ -412,6 +413,7 @@
     if (!formId) {
       formVersions = [];
       campaign.version_id = "";
+      formLanguages = ["en", "cs", "de"]; // Reset to defaults
       return;
     }
 
@@ -426,9 +428,30 @@
         // Select latest version by default
         campaign.version_id = formVersions[0].version_id;
       }
+
+      // Extract languages from the selected version
+      if (campaign.version_id) {
+        const selectedVersion = formVersions.find(v => v.version_id === campaign.version_id);
+        if (selectedVersion && selectedVersion.languages) {
+          formLanguages = Array.isArray(selectedVersion.languages) 
+            ? selectedVersion.languages 
+            : ["en", "cs", "de"];
+        }
+      }
     } catch (err) {
       console.error("Failed to load form versions:", err);
       formVersions = [];
+      formLanguages = ["en", "cs", "de"]; // Reset to defaults on error
+    }
+  }
+
+  // Watch for version changes and update languages
+  $: if (campaign.version_id && formVersions.length > 0) {
+    const selectedVersion = formVersions.find(v => v.version_id === campaign.version_id);
+    if (selectedVersion && selectedVersion.languages) {
+      formLanguages = Array.isArray(selectedVersion.languages) 
+        ? selectedVersion.languages 
+        : ["en", "cs", "de"];
     }
   }
 
