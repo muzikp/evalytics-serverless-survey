@@ -2446,66 +2446,261 @@ paths:
     get:
       tags:
         - Responses
-      summary: List responses
+      summary: List responses with universal filtering
+      description: |
+        Universal endpoint for listing responses with flexible filtering options.
+        Supports filtering by campaign, form, status, date ranges, and text enhancement.
+        
+        **Authorization:**
+        - Admins: Can view all responses
+        - Respondents: Can only view their own responses (filtered by email automatically)
+        
+        **Authentication:**
+        - Admin: Use `Authorization: Bearer <jwt>` or `X-API-Token: <token>` header
+        - Respondent: Use `X-Respondent-Token: <token>` header
+        
+        **Filter by campaign or form:**
+        - `campaign_id` - Filter by specific campaign
+        - `form_id` - Filter by form (can include responses from multiple campaigns)
+        
+        **Filter by status:**
+        - `response_status` - Can be specified multiple times (e.g., ?response_status=in_progress&response_status=completed)
+        - Allowed values: "in_progress", "completed"
+        
+        **Filter by dates:**
+        - `finished_before` / `finished_after` - Filter by submitted_at (completion date)
+        - `created_before` / `created_after` - Filter by created (response creation)
+        - Date format: ISO 8601 (e.g., "2026-01-10T12:00:00Z")
+        
+        **Text enhancement:**
+        - `includeQuestionText=true` - Add human-readable question text from form definition
+        - `includeAnswerText=true` - Add human-readable answer text for choice-based questions
+        
+        **Format:**
+        - `format=json` (default) - JSON response
+        - `format=xlsx` - Excel export (not yet implemented, returns 501)
+        
+        **Pagination:**
+        - `limit` (default: 50) - Number of results per page
+        - `offset` (default: 0) - Skip N results
+      security:
+        - bearerAuth: []
+        - apiToken: []
+        - respondentToken: []
       parameters:
-        - $ref: "#/components/parameters/Limit"
-        - $ref: "#/components/parameters/Offset"
-        - $ref: "#/components/parameters/TemplateIdQuery"
-        - $ref: "#/components/parameters/CampaignIdQuery"
-        - $ref: "#/components/parameters/SnapshotIdQuery"
-        - $ref: "#/components/parameters/RespondentIdQuery"
-        - name: token
+        - name: campaign_id
           in: query
           required: false
           schema:
             type: string
-          description: (Deprecated) Respondent token in query. Prefer X-Respondent-Token header.
-          deprecated: true
-        - name: is_complete
+            maxLength: 16
+          description: Filter by campaign ID
+        - name: form_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 16
+          description: Filter by form ID (responses from all campaigns using this form)
+        - name: response_status
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [in_progress, completed]
+          style: form
+          explode: true
+          description: Filter by response status (can specify multiple)
+        - name: finished_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter responses finished before this date (submitted_at < value)
+        - name: finished_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter responses finished after this date (submitted_at >= value)
+        - name: created_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter responses created before this date
+        - name: created_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter responses created after this date
+        - name: includeQuestionText
           in: query
           required: false
           schema:
             type: boolean
-        - name: from
+            default: false
+          description: Include human-readable question text in responses
+        - name: includeAnswerText
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include human-readable answer text for choice-based questions
+        - name: format
           in: query
           required: false
           schema:
             type: string
-            format: date-time
-        - name: to
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date-time
+            enum: [json, xlsx]
+            default: json
+          description: Export format (xlsx not yet implemented)
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
-          description: Response list
+          description: Response list with applied filters
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  export_date:
+                    type: string
+                    format: date-time
+                    description: Export timestamp
+                  filters:
+                    type: object
+                    description: Applied filters
+                    properties:
+                      campaign_id:
+                        type: string
+                      form_id:
+                        type: string
+                      response_status:
+                        type: array
+                        items:
+                          type: string
+                      finished_before:
+                        type: string
+                      finished_after:
+                        type: string
+                      created_before:
+                        type: string
+                      created_after:
+                        type: string
+                      includeQuestionText:
+                        type: boolean
+                      includeAnswerText:
+                        type: boolean
                   items:
                     type: array
                     items:
-                      $ref: "#/components/schemas/Response"
+                      type: object
+                      properties:
+                        response_id:
+                          type: string
+                        respondent_id:
+                          type: string
+                        email:
+                          type: string
+                        campaign_id:
+                          type: string
+                        campaign_public_id:
+                          type: string
+                        form_id:
+                          type: string
+                        form_name:
+                          type: string
+                        form_version:
+                          type: integer
+                        version_id:
+                          type: string
+                        attempt_no:
+                          type: integer
+                        status:
+                          type: string
+                          enum: [in_progress, completed]
+                        submitted_at:
+                          type: string
+                          format: date-time
+                        created:
+                          type: string
+                          format: date-time
+                        last_update:
+                          type: string
+                          format: date-time
+                        data:
+                          type: object
+                          description: Response data (enhanced with questionText/answerText if requested)
+                        request_data:
+                          type: object
+                        client_meta:
+                          type: object
                   page:
                     $ref: "#/components/schemas/Pagination"
+                  count:
+                    type: integer
+                    description: Number of items in current page
                 required:
+                  - export_date
+                  - filters
                   - items
                   - page
+                  - count
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "501":
+          description: Excel format not yet implemented
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
         "500":
           $ref: "#/components/responses/ServerError"
     post:
       tags:
         - Responses
-      summary: Admin upsert response
-      description: Primary write path is public /survey/{public_id}.
+      summary: Create new response
+      description: |
+        Create a new response for a respondent in a campaign.
+        Returns the newly created response with generated response_id.
+        
+        **Required fields:**
+        - respondent_id - Must exist in campaign_respondents
+        - campaign_id - Campaign must exist and not be removed
+        - data - Response data (SurveyJS format)
+        
+        **Optional fields:**
+        - status - "in_progress" or "completed" (default: "in_progress")
+        - request_data - HTTP request metadata
+        - client_meta - Client-side metadata
+        
+        **Notes:**
+        - Automatically determines attempt_no based on existing responses
+        - Checks allow_multiple_responses setting
+        - Sets submitted_at automatically if status is "completed"
+        - **Admin only** - Respondents cannot use this endpoint
+      security:
+        - bearerAuth: []
+        - apiToken: []
       requestBody:
         required: true
         content:
@@ -2516,21 +2711,38 @@ paths:
                 respondent_id:
                   type: string
                   maxLength: 32
+                  description: Respondent ID (must exist in campaign)
+                campaign_id:
+                  type: string
+                  maxLength: 16
+                  description: Campaign ID
                 data:
                   type: object
                   additionalProperties: true
-                is_complete:
-                  type: boolean
+                  description: Response data (SurveyJS format)
+                status:
+                  type: string
+                  enum: [in_progress, completed]
+                  default: in_progress
+                  description: Response status
+                request_data:
+                  type: object
+                  description: HTTP request metadata (optional)
+                client_meta:
+                  type: object
+                  description: Client-side metadata (optional)
               required:
                 - respondent_id
+                - campaign_id
                 - data
       responses:
         "200":
-          description: Upserted
+          description: Response created successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Response"
+                type: object
+                description: Full response object (same as GET /responses/{id})
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -2538,9 +2750,435 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: Campaign or respondent not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: Multiple responses not allowed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /responses/bulk:
+    post:
+      tags:
+        - Responses
+      summary: Bulk create responses
+      description: |
+        Create multiple responses in a single request.
+        Useful for importing or batch processing responses.
+        
+        **Request format:**
+        - Body must contain `responses` array
+        - Each response must have: respondent_id, campaign_id, data
+        - Partial success: Some responses may succeed while others fail
+        
+        **Response format:**
+        - `created_count` - Number of successfully created responses
+        - `failed_count` - Number of failed responses
+        - `created` - Array of created response summaries
+        - `failed` - Array of failed responses with error messages
+        
+        **Authorization:**
+        - **Admin only** - Respondents cannot use this endpoint
+      security:
+        - bearerAuth: []
+        - apiToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                responses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      respondent_id:
+                        type: string
+                        maxLength: 32
+                      campaign_id:
+                        type: string
+                        maxLength: 16
+                      data:
+                        type: object
+                        additionalProperties: true
+                      status:
+                        type: string
+                        enum: [in_progress, completed]
+                        default: in_progress
+                      request_data:
+                        type: object
+                      client_meta:
+                        type: object
+                    required:
+                      - respondent_id
+                      - campaign_id
+                      - data
+              required:
+                - responses
+      responses:
+        "200":
+          description: Bulk operation completed (partial success possible)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_count:
+                    type: integer
+                    description: Number of successfully created responses
+                  failed_count:
+                    type: integer
+                    description: Number of failed responses
+                  created:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        response_id:
+                          type: string
+                        respondent_id:
+                          type: string
+                        campaign_id:
+                          type: string
+                        status:
+                          type: string
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        data:
+                          type: object
+                          description: Original request data
+                        error:
+                          type: string
+                          description: Error message
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /responses/{id}:
+    get:
+      tags:
+        - Responses
+      summary: Get single response by ID
+      description: |
+        Retrieve a single response with full context including form data.
+        
+        **Format options:**
+        - `format=json` (default) - Returns JSON response with full details
+        - `format=html` - HTML format (not yet implemented, returns 501)
+        - `format=xlsx` - Excel format (not yet implemented, returns 501)
+        
+        **Response includes:**
+        - Full response data and metadata
+        - Respondent email
+        - Campaign information (ID, public_id)
+        - Form information (ID, name, version)
+        - Complete form definition (form_data) for processing questions/answers
+        
+        **Authorization:**
+        - Admins: Can view any response
+        - Respondents: Can only view their own responses (matched by email)
+      security:
+        - bearerAuth: []
+        - apiToken: []
+        - respondentToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: Response ID
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, html, xlsx]
+            default: json
+          description: Response format
+      responses:
+        "200":
+          description: Response details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response_id:
+                    type: string
+                    maxLength: 64
+                  respondent_id:
+                    type: string
+                    maxLength: 32
+                  email:
+                    type: string
+                    format: email
+                  campaign_id:
+                    type: string
+                    maxLength: 16
+                  campaign_public_id:
+                    type: string
+                  form_id:
+                    type: string
+                    maxLength: 16
+                  form_name:
+                    type: string
+                  form_version:
+                    type: integer
+                  version_id:
+                    type: string
+                    maxLength: 16
+                  attempt_no:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [in_progress, completed]
+                  submitted_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  created:
+                    type: string
+                    format: date-time
+                  last_update:
+                    type: string
+                    format: date-time
+                  data:
+                    type: object
+                    description: Response data (SurveyJS answers)
+                  request_data:
+                    type: object
+                    nullable: true
+                    description: HTTP request metadata
+                  client_meta:
+                    type: object
+                    nullable: true
+                    description: Client-side metadata
+                  form_data:
+                    type: object
+                    nullable: true
+                    description: SurveyJS form definition
+                required:
+                  - response_id
+                  - respondent_id
+                  - campaign_id
+                  - form_id
+                  - status
+                  - data
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Response not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+        "501":
+          description: Format not yet implemented
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      tags:
+        - Responses
+      summary: Update existing response
+      description: |
+        Update an existing response by ID.
+        Only provided fields will be updated.
+        
+        **Updatable fields:**
+        - data - Response data (completely replaces existing data)
+        - status - Response status (in_progress → completed sets submitted_at)
+        - request_data - HTTP request metadata
+        - client_meta - Client-side metadata
+        
+        **Notes:**
+        - Returns 404 if response doesn't exist or is removed
+        - Automatically updates last_update timestamp
+        - Setting status to "completed" sets submitted_at if not already set
+        
+        **Authorization:**
+        - Admins: Can update any response
+        - Respondents: Can only update their own responses (matched by email)
+      security:
+        - bearerAuth: []
+        - apiToken: []
+        - respondentToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: Response ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  additionalProperties: true
+                  description: Response data (SurveyJS format)
+                status:
+                  type: string
+                  enum: [in_progress, completed]
+                  description: Response status
+                request_data:
+                  type: object
+                  description: HTTP request metadata
+                client_meta:
+                  type: object
+                  description: Client-side metadata
+      responses:
+        "200":
+          description: Response updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Full response object (same as GET /responses/{id})
+        "400":
+          description: Bad request (no fields to update)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Response not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags:
+        - Responses
+      summary: Delete response (soft delete)
+      description: |
+        Soft delete a response by setting removed flag to 1.
+        The response data is preserved but excluded from queries.
+        
+        **Notes:**
+        - Returns 404 if response doesn't exist or is already removed
+        - Updates last_update timestamp
+        - Response won't appear in listings or GET requests
+        
+        **Authorization:**
+        - Admins: Can delete any response
+        - Respondents: Can only delete their own responses (matched by email)
+      security:
+        - bearerAuth: []
+        - apiToken: []
+        - respondentToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: Response ID
+      responses:
+        "200":
+          description: Response deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response_id:
+                    type: string
+                  message:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Response not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
         "500":
           $ref: "#/components/responses/ServerError"
   /survey:
@@ -2998,6 +3636,175 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /campaigns/{id}/responses/stats:
+    get:
+      tags:
+        - Campaigns
+      summary: Get response statistics for campaign
+      description: Returns counts of registered respondents, in-progress responses, and completed responses
+      parameters:
+        - $ref: "#/components/parameters/IdPath16"
+      responses:
+        "200":
+          description: Response statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id:
+                    type: string
+                  is_public:
+                    type: boolean
+                  total_respondents:
+                    type: integer
+                    description: Total registered respondents (0 for public campaigns)
+                  in_progress:
+                    type: integer
+                    description: Number of partially completed responses
+                  completed:
+                    type: integer
+                    description: Number of fully completed responses
+                  total_responses:
+                    type: integer
+                    description: Total responses (in_progress + completed)
+                required:
+                  - campaign_id
+                  - is_public
+                  - total_respondents
+                  - in_progress
+                  - completed
+                  - total_responses
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /campaigns/{id}/responses/export:
+    get:
+      tags:
+        - Campaigns
+      summary: Export campaign responses
+      description: |
+        Export responses with optional filtering and text enhancement.
+        
+        **Status filtering:** Select which response statuses to include (in_progress, completed, or both)
+        
+        **Text enhancement:** 
+        - `includeQuestionText`: Adds human-readable question text from survey definition
+        - `includeAnswerText`: For choice-based questions, adds text labels for selected choices
+        
+        **Format:** Currently supports JSON export. Excel export coming soon.
+        
+        Default language from campaign is used for text extraction.
+      parameters:
+        - $ref: "#/components/parameters/IdPath16"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "in_progress,completed"
+          description: Comma-separated list of statuses to include (in_progress, completed)
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, excel]
+            default: json
+          description: Export format (excel not yet implemented)
+        - name: includeQuestionText
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include human-readable question text from survey definition
+        - name: includeAnswerText
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include human-readable answer text for choice-based questions
+      responses:
+        "200":
+          description: Exported responses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id:
+                    type: string
+                  export_date:
+                    type: string
+                    format: date-time
+                  filters:
+                    type: object
+                    properties:
+                      status:
+                        type: array
+                        items:
+                          type: string
+                      includeQuestionText:
+                        type: boolean
+                      includeAnswerText:
+                        type: boolean
+                  responses:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        response_id:
+                          type: string
+                        respondent_id:
+                          type: string
+                        email:
+                          type: string
+                        status:
+                          type: string
+                          enum: [in_progress, completed]
+                        attempt_no:
+                          type: integer
+                        submitted_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        created:
+                          type: string
+                          format: date-time
+                        data:
+                          type: object
+                          description: Response data (enhanced with questionText/answerText if requested)
+                  count:
+                    type: integer
+                required:
+                  - campaign_id
+                  - export_date
+                  - filters
+                  - responses
+                  - count
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          description: Excel format not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/ServerError"
   /blacklist:

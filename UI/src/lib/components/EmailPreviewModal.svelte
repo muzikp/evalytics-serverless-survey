@@ -10,52 +10,125 @@
   export let selectedLanguage = "en";
   export let selectedRespondent = null;
   export let campaign = {};
+  export let respondentFields = [];
 
   let loading = false;
   let previewHtml = "";
+  let previewTitle = "";
 
-  $: if (show && emailTemplate) {
+  // Parse emailTemplate JSON
+  let emailTitle = "";
+  let emailBody = "";
+
+  $: {
+    if (emailTemplate) {
+      try {
+        const parsed = JSON.parse(emailTemplate);
+        emailTitle = parsed.title || "";
+        emailBody = parsed.body || "";
+      } catch (err) {
+        // Legacy format - plain HTML
+        emailBody = emailTemplate;
+        emailTitle = "";
+      }
+    }
+  }
+
+  $: if (show && (emailBody || emailTitle)) {
     renderPreview();
   }
 
   function renderPreview() {
     loading = true;
     try {
-      let html = emailTemplate;
+      console.log("Rendering email preview with:");
+      console.log("  emailTemplateFields:", emailTemplateFields);
+      console.log("  respondentFields:", respondentFields);
+      console.log("  selectedRespondent:", selectedRespondent);
+      console.log("  selectedLanguage:", selectedLanguage);
 
-      // Replace system placeholders
-      html = html.replace(/__campaign_name__/g, campaign.name || "[Campaign Name]");
-      html = html.replace(/__link__/g, getSurveyLink());
-      
-      // Replace respondent data
-      if (selectedRespondent) {
-        html = html.replace(/__email__/g, selectedRespondent.email || "[Email]");
-        html = html.replace(/__name__/g, selectedRespondent.name || "[Name]");
-        
-        // Replace other respondent fields
-        Object.keys(selectedRespondent).forEach((key) => {
-          if (key !== "email" && key !== "token") {
-            const placeholder = `__${key}__`;
-            const value = selectedRespondent[key] || `[${key}]`;
-            html = html.replace(new RegExp(placeholder, "g"), value);
+      // Process both title and body
+      let html = emailBody;
+      let title = emailTitle;
+
+      // Function to replace placeholders in text
+      const replacePlaceholders = (text) => {
+        if (!text) return text;
+
+        let result = text;
+
+        // Replace system placeholders
+        result = result.replace(
+          /__campaign_name__/g,
+          campaign.name || "[Campaign Name]",
+        );
+        result = result.replace(/__link__/g, getSurveyLink());
+
+        // Replace respondent data
+        if (selectedRespondent) {
+          result = result.replace(
+            /__email__/g,
+            selectedRespondent.email || "[Email]",
+          );
+          result = result.replace(
+            /__name__/g,
+            selectedRespondent.name || "[Name]",
+          );
+
+          // Replace respondent fields using field definitions
+          if (respondentFields && respondentFields.length > 0) {
+            console.log("Replacing respondent field placeholders...");
+            respondentFields.forEach((field) => {
+              const dataKey = field.dataKey || field.id;
+              const placeholder = `__${field.id}__`; // Use field ID (field_ra_...) for placeholder
+              let value = selectedRespondent[dataKey]; // But access data using dataKey
+
+              console.log(
+                `  ${placeholder} -> ${dataKey} = ${JSON.stringify(value)}`,
+              );
+
+              // Handle dictionary values (multilingual)
+              if (value && typeof value === "object" && !Array.isArray(value)) {
+                value =
+                  value[selectedLanguage] ||
+                  value.en ||
+                  value.cs ||
+                  JSON.stringify(value);
+              }
+
+              result = result.replace(
+                new RegExp(placeholder, "g"),
+                value || `[${field.label || field.id}]`,
+              );
+            });
           }
+        } else {
+          result = result.replace(/__email__/g, "[Email]");
+          result = result.replace(/__name__/g, "[Name]");
+        }
+
+        // Replace custom multilingual fields
+        console.log("Replacing email template fields...");
+        emailTemplateFields.forEach((field) => {
+          const placeholder = `__${field.id}__`;
+          const value =
+            field.value?.[selectedLanguage] ||
+            field.value?.en ||
+            field.name ||
+            `[${field.id}]`;
+          console.log(`  ${placeholder} = ${value}`);
+          result = result.replace(new RegExp(placeholder, "g"), value);
         });
-      } else {
-        html = html.replace(/__email__/g, "[Email]");
-        html = html.replace(/__name__/g, "[Name]");
-      }
 
-      // Replace custom multilingual fields
-      emailTemplateFields.forEach((field) => {
-        const placeholder = `__${field.id}__`;
-        const value = field[selectedLanguage] || field.en || field.name || `[${field.id}]`;
-        html = html.replace(new RegExp(placeholder, "g"), value);
-      });
+        return result;
+      };
 
-      previewHtml = html;
+      previewTitle = replacePlaceholders(title);
+      previewHtml = replacePlaceholders(html);
     } catch (error) {
       console.error("Failed to render preview:", error);
       previewHtml = "<p style='color: red;'>Failed to render preview</p>";
+      previewTitle = "[Error]";
     } finally {
       loading = false;
     }
@@ -65,7 +138,8 @@
     if (!selectedRespondent || !selectedRespondent.token) {
       return "[Survey Link]";
     }
-    const baseUrl = import.meta.env.VITE_SURVEY_BASE_URL || window.location.origin;
+    const baseUrl =
+      import.meta.env.VITE_SURVEY_BASE_URL || window.location.origin;
     return `${baseUrl}/survey/${campaign.public_id}?token=${selectedRespondent.token}`;
   }
 
@@ -108,11 +182,24 @@
             {#if selectedRespondent}
               <div class="info-item">
                 <strong>Respondent:</strong>
-                <span>{selectedRespondent.email || selectedRespondent.name || "Unknown"}</span>
+                <span
+                  >{selectedRespondent.email ||
+                    selectedRespondent.name ||
+                    "Unknown"}</span
+                >
               </div>
             {/if}
           </div>
 
+          <!-- Email Subject -->
+          {#if previewTitle}
+            <div class="email-subject">
+              <strong>Subject:</strong>
+              <span>{previewTitle}</span>
+            </div>
+          {/if}
+
+          <!-- Email Body -->
           <div class="preview-container">
             <div class="email-preview">
               {@html previewHtml}
@@ -224,6 +311,25 @@
     font-weight: 600;
   }
 
+  .email-subject {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f0f7ff;
+    border: 1px solid #cce5ff;
+    border-radius: 4px;
+  }
+
+  .email-subject strong {
+    font-weight: 600;
+    color: #0066cc;
+    margin-right: 0.5rem;
+  }
+
+  .email-subject span {
+    font-size: 1.1rem;
+    color: #333;
+  }
+
   .preview-container {
     border: 1px solid var(--color-border);
     border-radius: 4px;
@@ -233,7 +339,8 @@
   }
 
   .email-preview {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      sans-serif;
     font-size: 14px;
     line-height: 1.6;
     color: #333;

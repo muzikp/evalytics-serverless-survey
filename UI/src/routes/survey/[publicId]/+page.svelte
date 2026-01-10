@@ -19,6 +19,12 @@
   let campaignData = null;
   let existingResponse = null;
 
+  // Auto-save state
+  let autoSaveTimer = null;
+  let isSaving = false;
+  let lastSaved = null;
+  let autoSaveIntervalSeconds = null; // Configurable interval from campaign
+
   // Session tracking
   let sessionStart = null;
   let sessions = [];
@@ -30,6 +36,11 @@
 
   onDestroy(() => {
     endSession();
+
+    // Clear auto-save timer
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
 
     // Dispose survey
     if (survey) {
@@ -101,6 +112,7 @@
 
       const data = await res.json();
       campaignData = data;
+      autoSaveIntervalSeconds = data.auto_save_interval_seconds;
 
       // Check if can_reopen_after_submit is false and there's a submitted response
       if (token && data.can_reopen_after_submit === false) {
@@ -177,6 +189,9 @@
       // Handle survey completion
       surveyModel.onComplete.add(handleSurveyComplete);
 
+      // Handle value changes for auto-save
+      surveyModel.onValueChanged.add(handleValueChanged);
+
       // Render survey into container
       renderSurvey();
     } catch (err) {
@@ -239,12 +254,75 @@
     }
   }
 
+  function handleValueChanged(sender, options) {
+    // Skip auto-save if disabled (null or 0)
+    if (!autoSaveIntervalSeconds || autoSaveIntervalSeconds <= 0) {
+      return;
+    }
+
+    // Schedule auto-save after configured interval
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    autoSaveTimer = setTimeout(() => {
+      autoSave(sender);
+    }, autoSaveIntervalSeconds * 1000);
+  }
+
+  async function autoSave(sender) {
+    // Don't auto-save if survey is completed or in read-only mode
+    if (!token || sender.state === "completed" || sender.mode === "display") {
+      return;
+    }
+
+    // Don't auto-save if already saving or submitting
+    if (isSaving || submitting) {
+      return;
+    }
+
+    isSaving = true;
+
+    try {
+      const payload = {
+        data: sender.data,
+        status: "in_progress",
+      };
+
+      const url = `${API_BASE_URL}/survey/${publicId}/response?token=${encodeURIComponent(token)}`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        lastSaved = new Date();
+        console.log("✅ Auto-saved at", lastSaved.toLocaleTimeString());
+      } else {
+        console.warn("Auto-save failed:", res.status);
+      }
+    } catch (err) {
+      console.warn("Auto-save error:", err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
   async function handleSurveyComplete(sender) {
     // Disable survey to prevent further edits
     sender.mode = "display";
 
     submitting = true;
     endSession(); // End final session
+
+    // Clear any pending auto-save
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
 
     try {
       const completedAt = new Date().toISOString();

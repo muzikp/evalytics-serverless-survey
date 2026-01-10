@@ -19,6 +19,13 @@
   import RespondentsSection from "$lib/components/RespondentsSection.svelte";
   import EmailPlaceholderFields from "$lib/components/EmailPlaceholderFields.svelte";
   import EmailTemplateEditor from "$lib/components/EmailTemplateEditor.svelte";
+  // Lazy load ResponsesSection to avoid blocking page load
+  let ResponsesSection;
+  if (browser) {
+    import("$lib/components/ResponsesSection.svelte").then((module) => {
+      ResponsesSection = module.default;
+    });
+  }
   import { translations_store } from "$lib/i18n/index.js";
   import { toast } from "$lib/toast.js";
 
@@ -41,7 +48,7 @@
     can_edit_after_submit: false,
     can_reopen_after_submit: true,
     email_template: "",
-    email_title: "",
+    auto_save_interval_seconds: 10,
   };
 
   let forms = [];
@@ -59,15 +66,16 @@
   let editorsLoading = false;
   let respondentsLoading = false;
   let formLanguages = ["en", "cs", "de"]; // Languages from selected form version
-  
+
   // Component references
   let emailEditorComponent;
-  
+
   // Accordion state
   let accordionOpen = {
     general: true,
     respondents: false,
-    email: false
+    email: false,
+    responses: false,
   };
 
   // Available placeholders for email template - reactive to respondentFields and emailTemplateFields
@@ -77,18 +85,17 @@
     { value: "__name__", label: "Name", category: "System" },
     { value: "__campaign_name__", label: "Campaign Name", category: "System" },
     ...(respondentFields || [])
-      .filter((f) => f.name !== "email" && f.name !== "token")
+      .filter((f) => f.id !== "email" && f.id !== "token")
       .map((f) => ({
-        value: `__${f.name}__`,
-        label: f.label || f.name,
-        category: "Respondent"
+        value: `__${f.id}__`, // Use field ID (field_ra_...) not dataKey
+        label: f.label || f.id,
+        category: "Respondent",
       })),
-    ...(emailTemplateFields || [])
-      .map((f) => ({
-        value: `__${f.id}__`,
-        label: f.name || f.id,
-        category: "Custom"
-      }))
+    ...(emailTemplateFields || []).map((f) => ({
+      value: `__${f.id}__`,
+      label: f.name || f.id,
+      category: "Custom",
+    })),
   ];
 
   // Check auth
@@ -105,27 +112,38 @@
   }
 
   onMount(async () => {
-    if (isNewCampaign) {
-      generatedCampaignId = generateCampaignId();
-      await loadForms();
-      if (formIdParam) {
-        campaign.form_id = formIdParam;
+    try {
+      console.log("onMount started, isNewCampaign:", isNewCampaign);
+      if (isNewCampaign) {
+        generatedCampaignId = generateCampaignId();
+        console.log("Loading forms for new campaign...");
+        await loadForms();
+        if (formIdParam) {
+          campaign.form_id = formIdParam;
+        }
+        loading = false;
+
+        // Initialize editors for new non-public campaigns
+        if (!campaign.is_public) {
+          await loadEditors();
+        }
+      } else {
+        // Load forms FIRST, then campaign (campaign needs forms to find form_id)
+        console.log("Loading forms for existing campaign...");
+        await loadForms();
+        console.log("Loading campaign details...");
+        await loadCampaign();
+        console.log("Campaign loaded successfully");
+
+        // Initialize editors after campaign is loaded
+        if (!campaign.is_public) {
+          await loadEditors();
+        }
       }
+    } catch (err) {
+      console.error("ERROR in onMount:", err);
+      error = err.message || String(err);
       loading = false;
-
-      // Initialize editors for new non-public campaigns
-      if (!campaign.is_public) {
-        await loadEditors();
-      }
-    } else {
-      // Load forms FIRST, then campaign (campaign needs forms to find form_id)
-      await loadForms();
-      await loadCampaign();
-
-      // Initialize editors after campaign is loaded
-      if (!campaign.is_public) {
-        await loadEditors();
-      }
     }
   });
 
@@ -159,7 +177,6 @@
     error = "";
     try {
       const data = await getCampaign(campaignId);
-      console.log("Campaign data loaded:", data);
 
       // Extract title - can be string or object
       let title = data.title;
@@ -186,7 +203,6 @@
           emailTemplate = JSON.stringify(emailTemplate, null, 2);
         }
       }
-      console.log("Email template from API:", emailTemplate?.substring(0, 100));
 
       campaign = {
         name: title,
@@ -203,24 +219,18 @@
             ? Boolean(data.response_persistence)
             : true,
         email_template: emailTemplate,
+        auto_save_interval_seconds: data.auto_save_interval_seconds || 10,
       };
-      
+
       // Load email template fields
       if (data.email_template_fields) {
-        emailTemplateFields = Array.isArray(data.email_template_fields) 
-          ? data.email_template_fields 
+        emailTemplateFields = Array.isArray(data.email_template_fields)
+          ? data.email_template_fields
           : [];
       }
 
       // Find form_id from versions
       if (data.version_id && forms.length > 0) {
-        console.log(
-          "Looking for form_id for version:",
-          data.version_id,
-          "in",
-          forms.length,
-          "forms",
-        );
         for (const form of forms) {
           const formData = await getForm(form.form_id);
           const version = formData.versions?.find(
@@ -228,20 +238,9 @@
           );
           if (version) {
             campaign.form_id = form.form_id;
-            console.log("Found form_id:", form.form_id);
             break;
           }
         }
-        if (!campaign.form_id) {
-          console.warn("Could not find form for version_id:", data.version_id);
-        }
-      } else {
-        console.warn(
-          "Cannot lookup form_id - version_id:",
-          data.version_id,
-          "forms:",
-          forms.length,
-        );
       }
 
       // Load respondents for private campaigns
@@ -254,12 +253,6 @@
       toast.error(err.message || "Failed to load campaign");
     } finally {
       loading = false;
-      console.log(
-        "Campaign loaded, is_public:",
-        campaign.is_public,
-        "email_template length:",
-        campaign.email_template?.length,
-      );
     }
   }
 
@@ -269,14 +262,18 @@
       const response = await getCampaignRespondents(campaignId);
       const items = response.items || [];
 
-      console.log("API response items:", items);
-
       if (items.length > 0) {
         // Extract respondents data
         respondents = items.map((item) => {
-          const result = { 
+          const result = {
+            respondent_id: item.respondent_id, // Add respondent_id
             email: item.email,
-            token: item.token  // Add token from API response
+            token: item.token, // Add token from API response
+            language:
+              item.language ||
+              campaign.default_language ||
+              formLanguages[0] ||
+              "en", // Initialize language
           };
 
           // Extract data from JSON field
@@ -291,63 +288,94 @@
 
         console.log("All respondents after mapping:", respondents);
 
-        // Infer respondent fields from data
-        const fieldSet = new Set();
-        respondents.forEach((r) => {
-          Object.keys(r).forEach((key) => fieldSet.add(key));
-        });
+        // Only infer fields if not already loaded from campaign
+        if (!respondentFields || respondentFields.length === 0) {
+          // Infer respondent fields from data
+          const fieldSet = new Set();
+          respondents.forEach((r) => {
+            Object.keys(r).forEach((key) => fieldSet.add(key));
+          });
 
-        console.log("Field set:", Array.from(fieldSet));
+          console.log("Field set:", Array.from(fieldSet));
 
-        // Create field configuration (email and token are mandatory, others are custom)
-        respondentFields = Array.from(fieldSet)
-          .map((fieldName) => {
-            if (fieldName === "email") {
-              return {
-                name: "email",
-                label: "Email",
-                type: "email",
-                required: true,
-                order: 0,
-              };
-            } else if (fieldName === "token") {
-              return {
-                name: "token",
-                label: "Token",
-                type: "text",
-                required: false,
-                order: 1,
-              };
-            } else {
-              // Custom field - infer type from value
-              const sampleValue = respondents.find((r) => r[fieldName])?.[
-                fieldName
-              ];
-              return {
-                name: fieldName,
-                label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
-                type: typeof sampleValue === "number" ? "number" : "text",
-                required: false,
-                order: 10,
-              };
-            }
-          })
-          .sort((a, b) => a.order - b.order);
+          // Create field configuration (email and token are mandatory, others are custom)
+          respondentFields = Array.from(fieldSet)
+            .map((fieldName) => {
+              if (fieldName === "email") {
+                return {
+                  id: "email",
+                  label: "Email",
+                  type: "email",
+                  required: true,
+                  order: 0,
+                };
+              } else if (fieldName === "token") {
+                return {
+                  id: "token",
+                  label: "Token",
+                  type: "text",
+                  required: false,
+                  order: 1,
+                };
+              } else {
+                // Custom field - infer type from value
+                const sampleValue = respondents.find((r) => r[fieldName])?.[
+                  fieldName
+                ];
 
-        console.log("Loaded respondents:", respondents.length);
-        console.log("Inferred fields:", respondentFields);
+                let fieldType = "text";
+                if (typeof sampleValue === "number") {
+                  fieldType = "number";
+                } else if (
+                  typeof sampleValue === "object" &&
+                  sampleValue !== null
+                ) {
+                  // Check if it's a dictionary (has language keys)
+                  const keys = Object.keys(sampleValue);
+                  if (keys.some((k) => ["cs", "en", "de"].includes(k))) {
+                    fieldType = "dictionary";
+                  } else {
+                    fieldType = "json";
+                  }
+                }
+
+                // Check if field with this dataKey already exists in campaign.respondent_fields
+                const existingField = campaign.respondent_fields?.find(
+                  (f) => f.dataKey === fieldName,
+                );
+
+                // Use existing ID or generate stable one based on dataKey (without timestamp/random)
+                const fieldId = existingField?.id || `field_ra_${fieldName}`;
+
+                return {
+                  id: fieldId, // Use existing ID or stable ID based on dataKey
+                  label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+                  type: fieldType,
+                  dataKey: fieldName, // Store original key for data access
+                  required: false,
+                  order: 10,
+                };
+              }
+            })
+            .sort((a, b) => a.order - b.order);
+
+          console.log("Loaded respondents:", respondents.length);
+          console.log("Inferred fields:", respondentFields);
+        } else {
+          console.log("Using respondent_fields from campaign, not inferring");
+        }
       } else {
         // No respondents yet - set default fields
         respondentFields = [
           {
-            name: "email",
+            id: "email",
             label: "Email",
             type: "email",
             required: true,
             order: 0,
           },
           {
-            name: "token",
+            id: "token",
             label: "Token",
             type: "text",
             required: false,
@@ -432,10 +460,12 @@
 
       // Extract languages from the selected version
       if (campaign.version_id) {
-        const selectedVersion = formVersions.find(v => v.version_id === campaign.version_id);
+        const selectedVersion = formVersions.find(
+          (v) => v.version_id === campaign.version_id,
+        );
         if (selectedVersion && selectedVersion.languages) {
-          formLanguages = Array.isArray(selectedVersion.languages) 
-            ? selectedVersion.languages 
+          formLanguages = Array.isArray(selectedVersion.languages)
+            ? selectedVersion.languages
             : ["en", "cs", "de"];
         }
       }
@@ -448,19 +478,23 @@
 
   // Watch for version changes and update languages
   $: if (campaign.version_id && formVersions.length > 0) {
-    const selectedVersion = formVersions.find(v => v.version_id === campaign.version_id);
+    const selectedVersion = formVersions.find(
+      (v) => v.version_id === campaign.version_id,
+    );
     if (selectedVersion && selectedVersion.languages) {
-      formLanguages = Array.isArray(selectedVersion.languages) 
-        ? selectedVersion.languages 
+      formLanguages = Array.isArray(selectedVersion.languages)
+        ? selectedVersion.languages
         : ["en", "cs", "de"];
     }
   }
 
   async function handleSave() {
+    console.log("=== handleSave CALLED ===");
     error = "";
     saving = true;
 
     try {
+      console.log("Starting validation...");
       // Validate
       if (!campaign.name.trim()) {
         throw new Error("Campaign name is required");
@@ -496,12 +530,13 @@
         for (let i = 0; i < respondents.length; i++) {
           const respondent = respondents[i];
           for (const field of respondentFields) {
-            if (field.required && !respondent[field.name]) {
+            const dataKey = field.dataKey || field.id;
+            if (field.required && !respondent[dataKey]) {
               throw new Error(`Row ${i + 1}: ${field.label} is required`);
             }
             if (
-              respondent[field.name] &&
-              !validateRespondentField(respondent[field.name], field)
+              respondent[dataKey] &&
+              !validateRespondentField(respondent[dataKey], field)
             ) {
               throw new Error(`Row ${i + 1}: Invalid ${field.label}`);
             }
@@ -531,16 +566,40 @@
         allow_retries: campaign.allow_retries ? 1 : 0,
         response_persistence: campaign.response_persistence ? 1 : 0,
         email_template: emailTemplateForSave,
-        email_template_fields: emailTemplateFields.length > 0 ? emailTemplateFields : null,
+        email_template_fields:
+          emailTemplateFields.length > 0 ? emailTemplateFields : null,
+        respondent_fields:
+          respondentFields.length > 0 ? respondentFields : null,
+        auto_save_interval_seconds: campaign.auto_save_interval_seconds || 10,
       };
 
+      // Add respondents to payload
       if (isNewCampaign) {
         campaignData.campaign_id = generatedCampaignId;
-        campaignData.respondents = respondents;
+      }
+      campaignData.respondents = respondents;
+
+      console.log("=== SAVING CAMPAIGN ===");
+      console.log(
+        "Campaign ID:",
+        isNewCampaign ? generatedCampaignId : campaignId,
+      );
+      console.log("Campaign Data:", JSON.stringify(campaignData, null, 2));
+      console.log("Respondents:", JSON.stringify(respondents, null, 2));
+
+      if (isNewCampaign) {
+        console.log(
+          "Final payload (CREATE):",
+          JSON.stringify(campaignData, null, 2),
+        );
         await createCampaign(campaignData);
         toast.success("Campaign created successfully");
         goto("/admin/campaigns");
       } else {
+        console.log(
+          "Final payload (UPDATE):",
+          JSON.stringify(campaignData, null, 2),
+        );
         await updateCampaign(campaignId, campaignData);
         toast.success("Campaign updated successfully");
         // Don't reload page, just show success toast
@@ -581,12 +640,17 @@
       toast.error("Please configure respondent fields first");
       return;
     }
-    const newRespondent = {};
+    const newRespondent = {
+      language: campaign.default_language || formLanguages[0] || "en", // Set default language
+    };
     respondentFields.forEach((field) => {
-      if (field.name === "token" && autoGenerateToken) {
-        newRespondent[field.name] = generateToken();
+      const key = field.dataKey || field.id;
+      if (field.id === "token" && autoGenerateToken) {
+        newRespondent[key] = generateToken();
+      } else if (field.type === "dictionary") {
+        newRespondent[key] = { cs: "", en: "", de: "" }; // Initialize dictionary fields
       } else {
-        newRespondent[field.name] = "";
+        newRespondent[key] = "";
       }
     });
     respondents = [...respondents, newRespondent];
@@ -623,39 +687,42 @@
         return true;
     }
   }
-  
+
   // Accordion functions
   function toggleAccordion(section) {
     accordionOpen[section] = !accordionOpen[section];
   }
-  
+
   // Email template field functions
   function addEmailTemplateField() {
     const newField = {
-      id: `field_${Date.now()}`,
+      id: `field_em_${Date.now()}`,
       name: "",
-      cs: "",
-      en: "",
-      de: ""
+      type: "dictionary",
+      value: {
+        cs: "",
+        en: "",
+        de: "",
+      },
     };
     emailTemplateFields = [...emailTemplateFields, newField];
   }
-  
+
   function removeEmailTemplateField(index) {
     emailTemplateFields = emailTemplateFields.filter((_, i) => i !== index);
   }
-  
+
   function generateFieldPlaceholder(fieldId) {
     return `__${fieldId}__`;
   }
-  
+
   // Get survey URL with token
   function getSurveyUrl(token) {
-    const baseUrl = import.meta.env.VITE_SURVEY_BASE_URL || window.location.origin;
+    const baseUrl =
+      import.meta.env.VITE_SURVEY_BASE_URL || window.location.origin;
     return `${baseUrl}/survey/${campaign.public_id}?token=${token}`;
   }
 </script>
-
 
 <svelte:head>
   <title>{pageTitle} - {t("app.name")}</title>
@@ -694,12 +761,11 @@
     {/if}
 
     <form on:submit|preventDefault={handleSave}>
-      
       <!-- General Section -->
-      <AccordionSection 
-        title="General Settings" 
+      <AccordionSection
+        title="General Settings"
         isOpen={accordionOpen.general}
-        onToggle={() => toggleAccordion('general')}
+        onToggle={() => toggleAccordion("general")}
       >
         <CampaignGeneralSettings
           bind:campaign
@@ -712,10 +778,10 @@
 
       <!-- Respondents Section -->
       {#if !campaign.is_public}
-        <AccordionSection 
-          title="Respondents" 
+        <AccordionSection
+          title="Respondents"
           isOpen={accordionOpen.respondents}
-          onToggle={() => toggleAccordion('respondents')}
+          onToggle={() => toggleAccordion("respondents")}
         >
           <RespondentsSection
             bind:respondents
@@ -731,12 +797,12 @@
             on:copyLink={(e) => copySurveyLink(e.detail.respondent)}
           />
         </AccordionSection>
-        
+
         <!-- Email Template Section -->
-        <AccordionSection 
-          title="Email Template" 
+        <AccordionSection
+          title="Email Template"
           isOpen={accordionOpen.email}
-          onToggle={() => toggleAccordion('email')}
+          onToggle={() => toggleAccordion("email")}
         >
           <EmailPlaceholderFields
             bind:emailTemplateFields
@@ -747,15 +813,30 @@
           <EmailTemplateEditor
             bind:this={emailEditorComponent}
             bind:emailTemplate={campaign.email_template}
-            bind:emailTitle={campaign.email_title}
             {availablePlaceholders}
             bind:editorsLoading
             {emailTemplateFields}
             {respondents}
+            {respondentFields}
             languages={formLanguages}
             {campaign}
-            on:change={(e) => campaign.email_template = e.detail.value}
-            on:titleChange={(e) => campaign.email_title = e.detail.value}
+            on:change={(e) => (campaign.email_template = e.detail.value)}
+          />
+        </AccordionSection>
+      {/if}
+
+      <!-- Responses Section (only for existing campaigns) -->
+      {#if !isNewCampaign && ResponsesSection}
+        <AccordionSection
+          title="Responses"
+          isOpen={accordionOpen.responses}
+          onToggle={() => toggleAccordion("responses")}
+        >
+          <svelte:component
+            this={ResponsesSection}
+            {campaignId}
+            isPublic={campaign.is_public}
+            languages={formLanguages}
           />
         </AccordionSection>
       {/if}
@@ -1252,7 +1333,7 @@
     width: auto;
     margin-right: 0.5rem;
   }
-  
+
   /* Email Template Fields Table */
   .email-fields-table {
     overflow-x: auto;
@@ -1260,12 +1341,12 @@
     border-radius: 4px;
     background: white;
   }
-  
+
   .email-fields-table table {
     width: 100%;
     border-collapse: collapse;
   }
-  
+
   .email-fields-table th {
     background: #f8f9fa;
     padding: 0.75rem;
@@ -1275,30 +1356,30 @@
     color: #495057;
     border-bottom: 2px solid var(--color-border);
   }
-  
+
   .email-fields-table td {
     padding: 0.5rem;
     border-bottom: 1px solid #f0f0f0;
   }
-  
+
   .email-fields-table td input {
     padding: 0.5rem;
     border: 1px solid var(--color-border);
     border-radius: 4px;
     font-size: 0.875rem;
   }
-  
+
   .email-fields-table td input:focus {
     outline: none;
     border-color: var(--color-primary);
   }
-  
+
   .email-fields-table code {
     display: block;
     margin-top: 0.25rem;
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
   }
-  
+
   /* Editor Mode Toggle */
   .editor-mode-toggle {
     display: flex;
@@ -1307,7 +1388,7 @@
     border-radius: 4px;
     overflow: hidden;
   }
-  
+
   .editor-mode-toggle button {
     padding: 0.5rem 1rem;
     border: none;
@@ -1318,18 +1399,17 @@
     font-weight: 500;
     transition: all 0.2s;
   }
-  
+
   .editor-mode-toggle button:not(:last-child) {
     border-right: 1px solid var(--color-border);
   }
-  
+
   .editor-mode-toggle button.active {
     background: var(--color-primary);
     color: white;
   }
-  
+
   .editor-mode-toggle button:hover:not(.active) {
     background: #f5f5f5;
   }
 </style>
-

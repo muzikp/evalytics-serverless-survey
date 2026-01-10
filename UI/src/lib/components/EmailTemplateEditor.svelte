@@ -1,78 +1,73 @@
 <script>
-  import { onMount, tick } from "svelte";
-  import { browser } from "$app/environment";
+  import { onMount, onDestroy, tick } from "svelte";
   import { createEventDispatcher } from "svelte";
+  import loader from "@monaco-editor/loader";
   import Spinner from "./Spinner.svelte";
   import EmailPreviewModal from "./EmailPreviewModal.svelte";
 
   const dispatch = createEventDispatcher();
 
   export let emailTemplate = "";
-  export let emailTitle = "";
   export let availablePlaceholders = [];
   export let editorsLoading = false;
   export let emailTemplateFields = [];
   export let respondents = [];
+  export let respondentFields = [];
   export let languages = ["en", "cs", "de"];
   export let campaign = {};
 
   let monacoEditor;
   let monacoContainer;
-  let loader;
   let selectedLanguage = "en";
   let selectedRespondentEmail = "";
   let showPreview = false;
   let emailTitleInput;
 
-  $: selectedRespondent = respondents.find(r => r.email === selectedRespondentEmail) || null;
-  $: console.log("Respondents in editor:", respondents.length, respondents.map(r => r.email));
-
-  if (browser) {
-    import("@monaco-editor/loader").then((mod) => {
-      loader = mod.default;
-    });
+  // Auto-select first respondent when list changes
+  $: if (respondents.length > 0 && !selectedRespondentEmail) {
+    selectedRespondentEmail = respondents[0]?.email || "";
   }
 
-  export async function initializeEditors() {
-    if (typeof window === "undefined") return;
+  // Parse JSON template into separate title and body
+  let emailTitle = "";
+  let emailBody = "";
 
-    editorsLoading = true;
-    await tick();
+  $: {
+    if (emailTemplate) {
+      try {
+        const parsed = JSON.parse(emailTemplate);
+        emailTitle = parsed.title || "";
+        emailBody = parsed.body || "";
 
-    try {
-      // Load Monaco
-      if (!loader) {
-        const loaderModule = await import("@monaco-editor/loader");
-        loader = loaderModule.default;
+        // Update Monaco editor if it exists and value changed
+        if (monacoEditor && monacoEditor.getValue() !== emailBody) {
+          monacoEditor.setValue(emailBody);
+        }
+      } catch (err) {
+        // If not JSON, treat as legacy plain HTML
+        emailBody = emailTemplate;
+        emailTitle = "";
       }
-      const monaco = await loader.init();
-      window.monaco = monaco;
-
-      await tick();
-
-      // Initialize Monaco only
-      if (monacoContainer && !monacoEditor && window.monaco) {
-        monacoEditor = window.monaco.editor.create(monacoContainer, {
-          value: emailTemplate || "",
-          language: "html",
-          theme: "vs",
-          minimap: { enabled: false },
-          lineNumbers: "on",
-          wordWrap: "on",
-          automaticLayout: true,
-        });
-
-        monacoEditor.onDidChangeModelContent(() => {
-          emailTemplate = monacoEditor.getValue();
-          dispatch("change", { value: emailTemplate });
-        });
-      }
-    } catch (error) {
-      console.error("Failed to load editor:", error);
-    } finally {
-      editorsLoading = false;
     }
   }
+
+  // Combine title and body into JSON and dispatch
+  function updateTemplate() {
+    const template = {
+      title: emailTitle,
+      body: emailBody,
+    };
+    emailTemplate = JSON.stringify(template);
+    dispatch("change", { value: emailTemplate });
+  }
+
+  $: selectedRespondent =
+    respondents.find((r) => r.email === selectedRespondentEmail) || null;
+  $: console.log(
+    "Respondents in editor:",
+    respondents.length,
+    respondents.map((r) => r.email),
+  );
 
   function insertPlaceholder(placeholder, target = "body") {
     if (!placeholder) return;
@@ -83,12 +78,15 @@
       const before = emailTitle.substring(0, start);
       const after = emailTitle.substring(end);
       emailTitle = before + placeholder + after;
-      dispatch("titleChange", { value: emailTitle });
-      
+      updateTemplate();
+
       // Set cursor position after placeholder
       tick().then(() => {
         emailTitleInput.focus();
-        emailTitleInput.setSelectionRange(start + placeholder.length, start + placeholder.length);
+        emailTitleInput.setSelectionRange(
+          start + placeholder.length,
+          start + placeholder.length,
+        );
       });
     } else if (target === "body" && monacoEditor) {
       const selection = monacoEditor.getSelection();
@@ -103,26 +101,55 @@
       monacoEditor.focus();
     }
   }
-function handlePreview() {
+  function handlePreview() {
     showPreview = true;
   }
 
-  onMount(() => {
-    return () => {
-      if (monacoEditor) {
-        monacoEditor.dispose();
-      }
-    };
+  onMount(async () => {
+    editorsLoading = true;
+
+    try {
+      const monaco = await loader.init();
+
+      monacoEditor = monaco.editor.create(monacoContainer, {
+        value: emailBody || "",
+        language: "html",
+        theme: "vs",
+        minimap: { enabled: false },
+        lineNumbers: "on",
+        wordWrap: "on",
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+        fontSize: 14,
+      });
+
+      monacoEditor.onDidChangeModelContent(() => {
+        emailBody = monacoEditor.getValue();
+        updateTemplate();
+      });
+    } catch (error) {
+      console.error("Failed to initialize Monaco editor:", error);
+    } finally {
+      editorsLoading = false;
+    }
+  });
+
+  onDestroy(() => {
+    if (monacoEditor) {
+      monacoEditor.dispose();
+    }
   });
 </script>
 
 <EmailPreviewModal
   bind:show={showPreview}
   {emailTemplate}
+  {emailTitle}
   {emailTemplateFields}
   {selectedLanguage}
   {selectedRespondent}
   {campaign}
+  {respondentFields}
 />
 
 <div class="email-template-section">
@@ -138,19 +165,19 @@ function handlePreview() {
         }}
       >
         <option value="">+ Insert Placeholder</option>
-        {#each availablePlaceholders.filter(p => p.category === 'System') as placeholder}
+        {#each availablePlaceholders.filter((p) => p.category === "System") as placeholder}
           <option value={placeholder.value}>{placeholder.label}</option>
         {/each}
-        {#if availablePlaceholders.filter(p => p.category === 'Respondent').length > 0}
+        {#if availablePlaceholders.filter((p) => p.category === "Respondent").length > 0}
           <optgroup label="Respondent">
-            {#each availablePlaceholders.filter(p => p.category === 'Respondent') as placeholder}
+            {#each availablePlaceholders.filter((p) => p.category === "Respondent") as placeholder}
               <option value={placeholder.value}>{placeholder.label}</option>
             {/each}
           </optgroup>
         {/if}
-        {#if availablePlaceholders.filter(p => p.category === 'Custom').length > 0}
+        {#if availablePlaceholders.filter((p) => p.category === "Custom").length > 0}
           <optgroup label="Custom">
-            {#each availablePlaceholders.filter(p => p.category === 'Custom') as placeholder}
+            {#each availablePlaceholders.filter((p) => p.category === "Custom") as placeholder}
               <option value={placeholder.value}>{placeholder.label}</option>
             {/each}
           </optgroup>
@@ -162,7 +189,7 @@ function handlePreview() {
       type="text"
       bind:this={emailTitleInput}
       bind:value={emailTitle}
-      on:input={(e) => dispatch("titleChange", { value: e.target.value })}
+      on:input={updateTemplate}
       placeholder="Enter email subject line"
       required
     />
@@ -182,23 +209,23 @@ function handlePreview() {
           }}
         >
           <option value="">-- Select placeholder --</option>
-          {#each availablePlaceholders.filter(p => p.category === 'System') as placeholder}
+          {#each availablePlaceholders.filter((p) => p.category === "System") as placeholder}
             <option value={placeholder.value}>
               {placeholder.label} ({placeholder.category})
             </option>
           {/each}
-          {#if availablePlaceholders.filter(p => p.category === 'Respondent').length > 0}
+          {#if availablePlaceholders.filter((p) => p.category === "Respondent").length > 0}
             <optgroup label="Respondent Attributes">
-              {#each availablePlaceholders.filter(p => p.category === 'Respondent') as placeholder}
+              {#each availablePlaceholders.filter((p) => p.category === "Respondent") as placeholder}
                 <option value={placeholder.value}>
                   {placeholder.label}
                 </option>
               {/each}
             </optgroup>
           {/if}
-          {#if availablePlaceholders.filter(p => p.category === 'Custom').length > 0}
+          {#if availablePlaceholders.filter((p) => p.category === "Custom").length > 0}
             <optgroup label="Custom Fields">
-              {#each availablePlaceholders.filter(p => p.category === 'Custom') as placeholder}
+              {#each availablePlaceholders.filter((p) => p.category === "Custom") as placeholder}
                 <option value={placeholder.value}>
                   {placeholder.label}
                 </option>
@@ -250,16 +277,16 @@ function handlePreview() {
 
   <!-- Monaco Editor -->
   <div class="email-editor-wrapper">
+    <div
+      bind:this={monacoContainer}
+      class="monaco-editor"
+      style="width: 100%; height: 500px;"
+    ></div>
     {#if editorsLoading}
-      <div class="editors-loading">
+      <div class="editors-loading-overlay">
         <Spinner size="md" />
         <p>Loading editor...</p>
       </div>
-    {:else}
-      <div
-        bind:this={monacoContainer}
-        class="monaco-editor"
-      ></div>
     {/if}
   </div>
 </div>
@@ -400,10 +427,25 @@ function handlePreview() {
   }
 
   .email-editor-wrapper {
+    position: relative;
     background: white;
     border: 1px solid var(--color-border);
     border-radius: 4px;
     min-height: 500px;
+  }
+
+  .editors-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.9);
+    z-index: 10;
   }
 
   .monaco-editor {
@@ -420,4 +462,3 @@ function handlePreview() {
     gap: 1rem;
   }
 </style>
-

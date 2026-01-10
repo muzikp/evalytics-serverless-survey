@@ -17,14 +17,14 @@
       // Default fields
       fields = [
         {
-          name: "email",
+          id: "email",
           label: "Email",
           type: "email",
           required: true,
           readonly: true,
         },
         {
-          name: "token",
+          id: "token",
           label: "Token",
           type: "text",
           required: false,
@@ -43,12 +43,20 @@
     { value: "date", label: "Date" },
     { value: "tel", label: "Phone" },
     { value: "url", label: "URL" },
+    { value: "json", label: "JSON" },
+    { value: "dictionary", label: "Dictionary (Multilingual)" },
   ];
 
   function addField() {
     fields = [
       ...fields,
-      { name: "", label: "", type: "text", required: false, readonly: false },
+      {
+        id: `field_ra_${Date.now()}`,
+        label: "",
+        type: "text",
+        required: false,
+        readonly: false,
+      },
     ];
   }
 
@@ -64,29 +72,14 @@
   function validate() {
     errors = {};
 
-    // Check for empty names or labels
+    // Check for empty labels
     fields.forEach((field, index) => {
       if (!field.readonly) {
-        if (!field.name.trim()) {
-          errors[`name_${index}`] = "Field name is required";
-        } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field.name)) {
-          errors[`name_${index}`] =
-            "Invalid name (use letters, numbers, underscore)";
-        }
         if (!field.label.trim()) {
           errors[`label_${index}`] = "Field label is required";
         }
       }
     });
-
-    // Check for duplicate names
-    const names = fields
-      .map((f) => f.name.trim().toLowerCase())
-      .filter((n) => n);
-    const uniqueNames = new Set(names);
-    if (names.length !== uniqueNames.size) {
-      errors.duplicateNames = "Field names must be unique";
-    }
 
     return Object.keys(errors).length === 0;
   }
@@ -124,14 +117,18 @@
       </div>
 
       <div class="modal-body">
-        <p class="description">
-          Define the structure of your respondent table. Email and Token are
-          default fields.
-        </p>
-
-        {#if errors.duplicateNames}
-          <div class="error-message">{errors.duplicateNames}</div>
-        {/if}
+        <div
+          style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;"
+        >
+          <span class="description" style="margin: 0;"
+            >Define the structure of your respondent table</span
+          >
+          <span
+            class="help-icon"
+            title="Configure the structure of the respondent table. Email and Token are default fields and cannot be modified. Add custom fields to capture additional data."
+            >ℹ️</span
+          >
+        </div>
 
         <div class="fields-list">
           {#each fields as field, index}
@@ -139,18 +136,14 @@
               <div class="field-inputs">
                 <div class="input-group">
                   <label>
-                    Field Name
+                    Field ID
                     <input
                       type="text"
-                      bind:value={field.name}
-                      placeholder="e.g. company"
-                      disabled={field.readonly}
-                      class:error={errors[`name_${index}`]}
+                      value={field.id}
+                      disabled
+                      class="id-display"
                     />
                   </label>
-                  {#if errors[`name_${index}`]}
-                    <span class="error-text">{errors[`name_${index}`]}</span>
-                  {/if}
                 </div>
 
                 <div class="input-group">
@@ -479,5 +472,16 @@
 
   .btn-secondary:hover {
     background-color: #e0e0e0;
+  }
+
+  .help-icon {
+    cursor: help;
+    font-size: 1rem;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .help-icon:hover {
+    opacity: 1;
   }
 </style>

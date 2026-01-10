@@ -1,9 +1,33 @@
 <script>
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
 
   const dispatch = createEventDispatcher();
 
   export let emailTemplateFields = [];
+
+  // Ensure all fields have the new structure
+  onMount(() => {
+    emailTemplateFields = emailTemplateFields.map((field) => {
+      // If field doesn't have value property, migrate it
+      if (!field.value && (field.cs || field.en || field.de)) {
+        return {
+          id: field.id,
+          name: field.name,
+          type: "dictionary",
+          value: {
+            cs: field.cs || "",
+            en: field.en || "",
+            de: field.de || "",
+          },
+        };
+      }
+      // If value doesn't exist at all, create empty one
+      if (!field.value) {
+        field.value = { cs: "", en: "", de: "" };
+      }
+      return field;
+    });
+  });
 
   function addField() {
     dispatch("add");
@@ -15,8 +39,17 @@
 </script>
 
 <div class="form-group">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-    <label style="margin: 0;">Custom Email Placeholders</label>
+  <div
+    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+  >
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <label style="margin: 0;">Custom Email Placeholders</label>
+      <span
+        class="help-icon"
+        title="Create custom placeholders with translations for different languages. Use these in your email template."
+        >ℹ️</span
+      >
+    </div>
     <button
       type="button"
       class="btn-secondary"
@@ -26,25 +59,32 @@
       ➕ Add Field
     </button>
   </div>
-  <small style="color: #666; display: block; margin-bottom: 1rem;">
-    Create custom placeholders with translations for different languages
-  </small>
-  
+
   {#if emailTemplateFields.length > 0}
     <div class="email-fields-table">
       <table>
         <thead>
           <tr>
-            <th style="width: 30%;">Placeholder Name</th>
-            <th style="width: 23%;">Czech (cs)</th>
-            <th style="width: 23%;">English (en)</th>
-            <th style="width: 19%;">German (de)</th>
+            <th style="width: 25%;">ID</th>
+            <th style="width: 25%;">Placeholder Name</th>
+            <th style="width: 16%;">Czech (cs)</th>
+            <th style="width: 16%;">English (en)</th>
+            <th style="width: 13%;">German (de)</th>
             <th style="width: 5%; text-align: center;">Actions</th>
           </tr>
         </thead>
         <tbody>
           {#each emailTemplateFields as field, index}
             <tr>
+              <td>
+                <input
+                  type="text"
+                  value={field.id}
+                  disabled
+                  readonly
+                  style="width: 100%; background: #f5f5f5; cursor: not-allowed;"
+                />
+              </td>
               <td>
                 <input
                   type="text"
@@ -56,7 +96,7 @@
               <td>
                 <input
                   type="text"
-                  bind:value={field.cs}
+                  bind:value={field.value.cs}
                   placeholder="Dobrý den"
                   style="width: 100%;"
                 />
@@ -64,7 +104,7 @@
               <td>
                 <input
                   type="text"
-                  bind:value={field.en}
+                  bind:value={field.value.en}
                   placeholder="Hello"
                   style="width: 100%;"
                 />
@@ -72,7 +112,7 @@
               <td>
                 <input
                   type="text"
-                  bind:value={field.de}
+                  bind:value={field.value.de}
                   placeholder="Guten Tag"
                   style="width: 100%;"
                 />
@@ -93,7 +133,9 @@
       </table>
     </div>
   {:else}
-    <p style="color: #999; font-style: italic; padding: 1rem; background: #f9f9f9; border-radius: 4px;">
+    <p
+      style="color: #999; font-style: italic; padding: 1rem; background: #f9f9f9; border-radius: 4px;"
+    >
       No custom placeholders defined. Click "Add Field" to create one.
     </p>
   {/if}
@@ -171,5 +213,16 @@
 
   .btn-icon:hover {
     opacity: 0.7;
+  }
+
+  .help-icon {
+    cursor: help;
+    font-size: 1rem;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .help-icon:hover {
+    opacity: 1;
   }
 </style>

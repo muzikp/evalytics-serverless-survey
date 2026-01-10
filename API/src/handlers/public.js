@@ -108,6 +108,7 @@ async function getPublicSurvey(publicId, authToken) {
     max_attempts: campaign.max_attempts,
     can_edit_after_submit: Boolean(campaign.can_edit_after_submit),
     can_reopen_after_submit: Boolean(campaign.can_reopen_after_submit ?? true), // Default true if null
+    auto_save_interval_seconds: campaign.auto_save_interval_seconds,
     respondent: respondent ? {
       respondent_id: respondent.respondent_id,
       email: respondent.email

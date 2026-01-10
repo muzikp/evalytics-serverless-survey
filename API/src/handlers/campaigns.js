@@ -50,6 +50,18 @@ export async function handleCampaigns(event, method, path, authToken) {
     }
   }
 
+  // GET /campaigns/{id}/responses/stats - Get response statistics
+  const statsMatch = path.match(/^\/campaigns\/([^/]+)\/responses\/stats$/);
+  if (statsMatch && method === 'GET') {
+    return await getResponseStats(user, statsMatch[1]);
+  }
+
+  // GET /campaigns/{id}/responses/export - Export responses
+  const exportMatch = path.match(/^\/campaigns\/([^/]+)\/responses\/export$/);
+  if (exportMatch && method === 'GET') {
+    return await exportResponses(event, user, exportMatch[1]);
+  }
+
   return errorResponse(404, 'NOT_FOUND', 'Campaign endpoint not found');
 }
 
@@ -513,4 +525,243 @@ async function addRespondents(event, user, campaignId) {
     added: added.length,
     respondents: added
   });
+}
+
+async function getResponseStats(user, campaignId) {
+  // Verify campaign exists
+  const campaign = await queryOne(
+    'SELECT campaign_id, is_public FROM campaigns WHERE campaign_id = ?',
+    [campaignId]
+  );
+
+  if (!campaign) {
+    return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
+  }
+
+  // Get total registered respondents (for private campaigns)
+  let totalRespondents = 0;
+  if (!campaign.is_public) {
+    const [resCount] = await query(
+      'SELECT COUNT(*) as count FROM campaign_respondents WHERE campaign_id = ?',
+      [campaignId]
+    );
+    totalRespondents = resCount.count;
+  }
+
+  // Get response statistics
+  const [stats] = await query(
+    `SELECT 
+      COUNT(DISTINCT CASE WHEN status = 'in_progress' THEN response_id END) as in_progress_count,
+      COUNT(DISTINCT CASE WHEN status = 'completed' THEN response_id END) as completed_count,
+      COUNT(DISTINCT response_id) as total_responses
+    FROM responses 
+    WHERE campaign_id = ? AND removed = 0`,
+    [campaignId]
+  );
+
+  return apiResponse(200, {
+    campaign_id: campaignId,
+    is_public: campaign.is_public,
+    total_respondents: totalRespondents,
+    in_progress: stats.in_progress_count || 0,
+    completed: stats.completed_count || 0,
+    total_responses: stats.total_responses || 0
+  });
+}
+
+async function exportResponses(event, user, campaignId) {
+  const params = event.queryStringParameters || {};
+  
+  // Parse parameters
+  const statusFilter = params.status ? params.status.split(',') : ['in_progress', 'completed'];
+  const format = params.format || 'json';
+  const includeQuestionText = params.includeQuestionText === 'true';
+  const includeAnswerText = params.includeAnswerText === 'true';
+  const language = params.language || null; // Get language parameter from query string
+
+  // Verify campaign exists and get form version
+  const campaign = await queryOne(
+    `SELECT c.campaign_id, c.version_id, c.default_language, 
+            fv.data as form_data
+     FROM campaigns c
+     LEFT JOIN form_versions fv ON c.version_id = fv.version_id
+     WHERE c.campaign_id = ?`,
+    [campaignId]
+  );
+
+  if (!campaign) {
+    return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
+  }
+
+  // Parse form data
+  let formData = null;
+  try {
+    formData = typeof campaign.form_data === 'string' 
+      ? JSON.parse(campaign.form_data) 
+      : campaign.form_data;
+  } catch (e) {
+    console.error('Failed to parse form_data:', e);
+  }
+
+  // Get responses
+  let sql = `
+    SELECT r.response_id, r.respondent_id, r.status, r.attempt_no, 
+           r.data, r.submitted_at, r.created, r.last_update,
+           cr.email
+    FROM responses r
+    LEFT JOIN campaign_respondents cr ON r.respondent_id = cr.respondent_id
+    WHERE r.campaign_id = ? AND r.removed = 0
+  `;
+  
+  const sqlParams = [campaignId];
+  
+  if (statusFilter.length < 2) {
+    sql += ' AND r.status IN (?)';
+    sqlParams.push(statusFilter);
+  }
+  
+  sql += ' ORDER BY r.created DESC';
+  
+  const responses = await query(sql, sqlParams);
+
+  // Process responses based on format
+  if (format === 'json') {
+    const processedResponses = responses.map(r => {
+      const responseData = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+      
+      let processedData = responseData;
+      
+      // If includeQuestionText or includeAnswerText, enhance the data
+      if ((includeQuestionText || includeAnswerText) && formData && formData.pages) {
+        // Use provided language or fall back to campaign's default language
+        const targetLanguage = language || campaign.default_language || 'en';
+        processedData = enhanceResponseData(
+          responseData, 
+          formData, 
+          targetLanguage,
+          includeQuestionText,
+          includeAnswerText
+        );
+      }
+
+      return {
+        response_id: r.response_id,
+        respondent_id: r.respondent_id,
+        email: r.email,
+        status: r.status,
+        attempt_no: r.attempt_no,
+        submitted_at: r.submitted_at,
+        created: r.created,
+        data: processedData
+      };
+    });
+
+    return apiResponse(200, {
+      campaign_id: campaignId,
+      export_date: new Date().toISOString(),
+      filters: {
+        status: statusFilter,
+        includeQuestionText,
+        includeAnswerText
+      },
+      responses: processedResponses,
+      count: processedResponses.length
+    });
+  }
+
+  // For Excel format (not implemented yet)
+  if (format === 'excel') {
+    return errorResponse(501, 'NOT_IMPLEMENTED', 'Excel export not yet implemented');
+  }
+
+  return errorResponse(400, 'INVALID_FORMAT', 'Invalid format. Supported: json, excel');
+}
+
+/**
+ * Enhance response data with question/answer texts from form definition
+ */
+function enhanceResponseData(responseData, formData, language, includeQuestionText, includeAnswerText) {
+  const enhanced = {};
+  
+  // Build question map from form data
+  const questionMap = {};
+  if (formData.pages) {
+    formData.pages.forEach(page => {
+      if (page.elements) {
+        page.elements.forEach(element => {
+          questionMap[element.name] = element;
+        });
+      }
+    });
+  }
+
+  // Process each answer
+  Object.keys(responseData).forEach(questionName => {
+    const answer = responseData[questionName];
+    const question = questionMap[questionName];
+    
+    // Get question title in specified language
+    let questionText = questionName;
+    if (question && includeQuestionText && question.title) {
+      if (typeof question.title === 'object') {
+        // Try requested language, fallback to 'default', then to first available
+        questionText = question.title[language] || question.title.default || question.title[Object.keys(question.title)[0]] || questionName;
+      } else if (typeof question.title === 'string') {
+        questionText = question.title;
+      }
+    }
+
+    // Get answer text
+    let answerValue = answer;
+    if (question && includeAnswerText) {
+      // For choice-based questions, get text of selected choice(s)
+      if (question.choices && Array.isArray(question.choices)) {
+        if (Array.isArray(answer)) {
+          // Multiple choices - join with comma
+          answerValue = answer.map(val => 
+            getChoiceText(question.choices, val, language)
+          ).join(', ');
+        } else {
+          // Single choice
+          answerValue = getChoiceText(question.choices, answer, language);
+        }
+      }
+      // For non-choice questions, answerValue stays as answer
+    }
+
+    // Use translated question text as key when both options are enabled
+    const key = (includeQuestionText && includeAnswerText) ? questionText : questionName;
+    enhanced[key] = answerValue;
+  });
+
+  return enhanced;
+}
+
+/**
+ * Get choice text by value
+ */
+function getChoiceText(choices, value, language) {
+  const choice = choices.find(c => {
+    if (typeof c === 'object') {
+      return c.value === value;
+    }
+    return c === value;
+  });
+
+  if (!choice) return value;
+
+  if (typeof choice === 'object') {
+    if (choice.text) {
+      if (typeof choice.text === 'object') {
+        // Try requested language, fallback to 'default', then to first available
+        return choice.text[language] || choice.text.default || choice.text[Object.keys(choice.text)[0]] || value;
+      }
+      if (typeof choice.text === 'string') {
+        return choice.text;
+      }
+    }
+    return choice.value || value;
+  }
+
+  return choice;
 }

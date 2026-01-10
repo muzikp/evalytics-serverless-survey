@@ -17,7 +17,7 @@ function getAuthHeader() {
 }
 
 // Generic API request
-async function apiRequest(method, path, body = null, options = {}) {
+export async function apiRequest(method, path, body = null, options = {}) {
 	const url = `${API_BASE_URL}${path}`;
 	const authData = get(auth);
 	

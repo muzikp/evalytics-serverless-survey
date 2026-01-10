@@ -56,11 +56,16 @@
 
 <div class="form-group">
   <label for="version">Form Version *</label>
-  <select id="version" bind:value={campaign.version_id} required disabled={!campaign.form_id}>
+  <select
+    id="version"
+    bind:value={campaign.version_id}
+    required
+    disabled={!campaign.form_id}
+  >
     <option value="">Select a version</option>
     {#each formVersions as version}
       <option value={version.version_id}>
-        v{version.version} - {version.name || 'Unnamed'}
+        v{version.version} - {version.name || "Unnamed"}
       </option>
     {/each}
   </select>
@@ -103,7 +108,8 @@
     Save Progress Automatically
   </label>
   <small style="color: #666; display: block; margin-top: 0.25rem;">
-    If enabled, respondents will see their previous answers when reopening the survey
+    If enabled, respondents will see their previous answers when reopening the
+    survey
   </small>
 </div>
 
@@ -123,7 +129,8 @@
     Can reopen after submit
   </label>
   <small style="color: #666; display: block; margin-top: 0.25rem;">
-    If disabled, tokens will be invalidated after submission and redirect to homepage
+    If disabled, tokens will be invalidated after submission and redirect to
+    homepage
   </small>
 </div>
 

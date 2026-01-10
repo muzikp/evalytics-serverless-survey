@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
   import Spinner from "./Spinner.svelte";
+  import EditDictionaryDialog from "./EditDictionaryDialog.svelte";
 
   const dispatch = createEventDispatcher();
 
@@ -10,6 +11,11 @@
   export let importing = false;
   export let autoGenerateToken = true;
   export let campaign = {};
+  export let languages = ["en", "cs", "de"];
+
+  let showDictionaryDialog = false;
+  let editingDictRespondent = null;
+  let editingDictField = null;
 
   function handleConfigureFields() {
     dispatch("configure");
@@ -31,6 +37,19 @@
     dispatch("copyLink", { respondent });
   }
 
+  function handleEditDictionary(event) {
+    editingDictRespondent = event.detail.respondent;
+    editingDictField = event.detail.field;
+    showDictionaryDialog = true;
+  }
+
+  function handleSaveDictionary(event) {
+    const { respondent, field, value } = event.detail;
+    respondent[field.dataKey || field.id] = value;
+    respondents = [...respondents];
+    dispatch("change");
+  }
+
   function validateField(value, field) {
     if (field.required && !value) {
       return false;
@@ -50,16 +69,65 @@
           return false;
         }
       case "tel":
-        return /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/.test(value);
+        return /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/.test(
+          value,
+        );
+      case "json":
+        try {
+          if (typeof value === "string") {
+            JSON.parse(value);
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      case "dictionary":
+        // Dictionary should be an object with language keys
+        if (typeof value === "string") {
+          try {
+            const parsed = JSON.parse(value);
+            return (
+              typeof parsed === "object" &&
+              parsed !== null &&
+              !Array.isArray(parsed)
+            );
+          } catch {
+            return false;
+          }
+        }
+        return (
+          typeof value === "object" && value !== null && !Array.isArray(value)
+        );
       default:
         return true;
     }
   }
+
+  function copyPlaceholder(field) {
+    const placeholder = `__${field.id}__`;
+    navigator.clipboard.writeText(placeholder);
+    // Optional: show feedback toast
+  }
 </script>
 
-<p style="color: #666; margin-bottom: 1rem;">
-  Add respondents who will receive survey invitations
-</p>
+<EditDictionaryDialog
+  bind:show={showDictionaryDialog}
+  respondent={editingDictRespondent}
+  field={editingDictField}
+  {languages}
+  on:save={handleSaveDictionary}
+/>
+
+<div
+  style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"
+>
+  <span style="font-weight: 500;">Respondents</span>
+  <span
+    class="help-icon"
+    title="Add respondents who will receive survey invitations. Each respondent needs an email and optional custom attributes."
+    >ℹ️</span
+  >
+</div>
 
 <div class="respondent-actions">
   <button type="button" class="btn-primary" on:click={handleConfigureFields}>
@@ -85,13 +153,15 @@
 </div>
 
 <div class="form-group" style="margin-top: 1rem;">
-  <label>
+  <label style="display: flex; align-items: center; gap: 0.5rem;">
     <input type="checkbox" bind:checked={autoGenerateToken} />
-    Automatically generate tokens for new respondents
+    <span>Automatically generate tokens for new respondents</span>
+    <span
+      class="help-icon"
+      title="When enabled, tokens will be auto-generated when adding new rows. Tokens are unique identifiers used in survey links."
+      >ℹ️</span
+    >
   </label>
-  <small style="color: #666; display: block; margin-top: 0.25rem;">
-    When enabled, tokens will be auto-generated when adding new rows
-  </small>
 </div>
 
 {#if respondentFields.length === 0}
@@ -110,8 +180,14 @@
     <table>
       <thead>
         <tr>
+          <th style="width: 80px;">ID</th>
+          <th style="width: 100px;">Language</th>
           {#each respondentFields as field}
-            <th>
+            <th
+              on:click={() => copyPlaceholder(field)}
+              style="cursor: pointer;"
+              title="Click to copy placeholder: __{field.id}__"
+            >
               {field.label}
               {#if field.required}<span style="color: #e53935;">*</span>{/if}
             </th>
@@ -122,15 +198,71 @@
       <tbody>
         {#each respondents as respondent, index}
           <tr>
+            <td>
+              <input
+                type="text"
+                value={respondent.respondent_id || ""}
+                disabled
+                readonly
+                style="background: #f5f5f5; cursor: not-allowed;"
+              />
+            </td>
+            <td>
+              <select
+                bind:value={respondent.language}
+                style="width: 100%; padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 4px; font-size: 0.875rem; background: white;"
+              >
+                {#each languages as lang}
+                  <option value={lang}>
+                    {lang.toUpperCase()}
+                  </option>
+                {/each}
+              </select>
+            </td>
             {#each respondentFields as field}
-              <td>
-                <input
-                  type={field.type}
-                  bind:value={respondent[field.name]}
-                  required={field.required}
-                  class:invalid={!validateField(respondent[field.name], field)}
-                  placeholder={field.label}
-                />
+              <td
+                data-field-id={field.id}
+                data-data-key={field.dataKey || field.id}
+              >
+                {#if field.type === "json"}
+                  <textarea
+                    bind:value={respondent[field.dataKey || field.id]}
+                    required={field.required}
+                    class:invalid={!validateField(
+                      respondent[field.dataKey || field.id],
+                      field,
+                    )}
+                    placeholder={'{"key": "value"}'}
+                    rows="2"
+                    style="font-family: monospace; font-size: 0.85rem;"
+                  />
+                {:else if field.type === "dictionary"}
+                  <button
+                    type="button"
+                    class="btn-edit-dict"
+                    on:click={() =>
+                      handleEditDictionary({ detail: { respondent, field } })}
+                    title={respondent[field.dataKey || field.id] &&
+                    typeof respondent[field.dataKey || field.id] === "object"
+                      ? Object.entries(respondent[field.dataKey || field.id])
+                          .map(([lang, val]) => `${lang.toUpperCase()}: ${val}`)
+                          .join(" | ")
+                      : "Edit translations"}
+                  >
+                    📝 Edit Translations
+                  </button>
+                {:else}
+                  <input
+                    type={field.type === "dictionary" ? "text" : field.type}
+                    bind:value={respondent[field.dataKey || field.id]}
+                    required={field.required}
+                    class:invalid={!validateField(
+                      respondent[field.dataKey || field.id],
+                      field,
+                    )}
+                    placeholder={field.label}
+                  />
+                {/if}
               </td>
             {/each}
             <td class="action-buttons">
@@ -247,6 +379,7 @@
     background: #f8f9fa;
     font-weight: 600;
     font-size: 0.875rem;
+    white-space: nowrap;
   }
 
   .respondents-table input {
@@ -265,6 +398,42 @@
   .respondents-table input.invalid {
     border-color: #e53935;
     background-color: #ffebee;
+  }
+
+  .respondents-table textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .respondents-table textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .respondents-table textarea.invalid {
+    border-color: #e53935;
+    background-color: #ffebee;
+  }
+
+  .btn-edit-dict {
+    padding: 0.5rem 0.75rem;
+    background: #f0f7ff;
+    border: 1px solid #90caf9;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #1976d2;
+    white-space: nowrap;
+  }
+
+  .btn-edit-dict:hover {
+    background: #e3f2fd;
+    border-color: #64b5f6;
   }
 
   .btn-icon {
@@ -315,5 +484,16 @@
   .loading-state {
     text-align: center;
     padding: 2rem;
+  }
+
+  .help-icon {
+    cursor: help;
+    font-size: 1rem;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .help-icon:hover {
+    opacity: 1;
   }
 </style>

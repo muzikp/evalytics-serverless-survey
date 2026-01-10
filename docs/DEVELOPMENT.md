@@ -39,6 +39,20 @@ Lokální napojení na API:
 VITE_API_BASE_URL=http://127.0.0.1:3000 npm run dev:ui
 ```
 
+## API Token pro testování
+
+Pro snadné testování API bez přihlašování můžete vytvořit trvalý API token:
+
+```bash
+cd API
+node create-admin-api-token.js
+```
+
+Token použijte v Postman nebo curl s headerem:
+```
+X-API-Token: <your-token>
+```
+
 ## Doporučený workflow s Claude Sonnet ve VSCode
 - udržuj „single source of truth“ pro API v `docs/openapi.yaml`
 - změny dělej ve sledu: OpenAPI → backend → UI → testy → dokumentace

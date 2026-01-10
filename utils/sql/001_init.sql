@@ -221,6 +221,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   -- Limity
   max_attempts       INT NULL COMMENT 'Max počet pokusů (NULL = neomezeno)',
   
+  -- Auto-save nastavení
+  auto_save_interval_seconds INT NULL DEFAULT 10 COMMENT 'Interval průběžného ukládání v sekundách (NULL = vypnuto, default 10)',
+  
   -- Soft delete (migration 008)
   removed            TINYINT(1) DEFAULT 0 COMMENT 'Soft delete flag: 0=active, 1=smazán',
   

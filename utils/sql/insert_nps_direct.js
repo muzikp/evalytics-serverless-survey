@@ -299,6 +299,32 @@ await connection.execute('DELETE FROM form_versions');
 await connection.execute('DELETE FROM forms');
 console.log('✓ Cleared old data');
 
+// === ADD MISSING COLUMNS (if not exist) ===
+// Add respondent_fields and default_language columns if they don't exist
+try {
+  await connection.execute(`ALTER TABLE campaigns ADD COLUMN respondent_fields JSON NULL COMMENT 'Respondent field configuration'`);
+  console.log('✓ Added respondent_fields column');
+} catch (err) {
+  if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  console.log('ℹ respondent_fields column already exists');
+}
+
+try {
+  await connection.execute(`ALTER TABLE campaigns ADD COLUMN default_language VARCHAR(10) DEFAULT 'en' COMMENT 'Default language'`);
+  console.log('✓ Added default_language column');
+} catch (err) {
+  if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  console.log('ℹ default_language column already exists');
+}
+
+try {
+  await connection.execute(`ALTER TABLE campaign_respondents ADD COLUMN language VARCHAR(10) DEFAULT NULL COMMENT 'Respondent preferred language'`);
+  console.log('✓ Added language column to campaign_respondents');
+} catch (err) {
+  if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  console.log('ℹ language column already exists in campaign_respondents');
+}
+
 // === FORM INSERT ===
 // form_id: Random 16-char ID (např. '549HHXFZ38V6ZX8D')
 // name: Human-readable název formuláře
@@ -334,27 +360,70 @@ console.log('✓ Inserted form version');
 // close_on: Datum uzavření (90 dní od vytvoření)
 // is_public: 0 = private (jen pro pozvané), 1 = veřejný (odkaz)
 // allow_multiple_responses: 0 = jedna odpověď, 1 = více odpovědí
+// email_template: JSON {"title": "Subject...", "body": "<html>..."}
+// email_template_fields: JSON array [{id: "field_em_...", name: "greeting", type: "dictionary", value: {cs, en, de}}]
+// respondent_fields: JSON array [{id: "field_ra_...", label: "Salutation", type: "dictionary", dataKey: "salutation"}]
 // VAZBA: campaign_respondents.campaign_id → campaigns.campaign_id
+
+// Use fixed field IDs to maintain consistency across script runs
+const salutationFieldId = 'field_ra_salutation';
+const departmentFieldId = 'field_ra_department';
+
+// Email template with new JSON structure
+const emailTemplate = {
+  title: "Survey Invitation - __campaign_name__",
+  body: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+    <p>__field_em_greeting__ __${salutationFieldId}__,</p>
+    <p>We would love to hear your feedback from the __${departmentFieldId}__ department.</p>
+    <p style="margin: 20px 0;"><a href="__link__" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Start Survey</a></p>
+    <p>Thank you for your time!</p>
+  </div>`
+};
+
+// Email template fields (custom multilingual placeholders)
+const emailTemplateFields = [
+  {
+    id: "field_em_greeting",
+    name: "greeting",
+    type: "dictionary",
+    value: {
+      cs: "Dobrý den",
+      en: "Hello",
+      de: "Guten Tag"
+    }
+  }
+];
+
+// Respondent fields configuration
+const respondentFields = [
+  { id: "email", label: "Email", type: "email", required: true, readonly: true, order: 0 },
+  { id: "token", label: "Token", type: "text", required: false, readonly: true, order: 1 },
+  { id: salutationFieldId, label: "Salutation", type: "dictionary", dataKey: "salutation", required: false, order: 2 },
+  { id: departmentFieldId, label: "Department", type: "text", dataKey: "department", required: false, order: 3 }
+];
+
 // Insert campaign
 await connection.execute(
-  'INSERT INTO campaigns (campaign_id, public_id, title, description, version_id, email_template, open_on, close_on, is_public, allow_multiple_responses, created_by, last_modified_by, created, last_update) VALUES (?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 90 DAY), ?, ?, ?, ?, NOW(), NOW())',
+  'INSERT INTO campaigns (campaign_id, public_id, title, description, version_id, email_template, email_template_fields, respondent_fields, default_language, open_on, close_on, is_public, allow_multiple_responses, created_by, last_modified_by, created, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 90 DAY), ?, ?, ?, ?, NOW(), NOW())',
   [
     '4KS624HEW5PBFFSM',
     'nps-survey-2026',
     JSON.stringify({ "en": "NPS Survey 2026", "cs": "NPS průzkum 2026", "de": "NPS-Umfrage 2026" }),
     JSON.stringify({ "en": "Help us improve our product", "cs": "Pomozte nám zlepšit náš produkt", "de": "Helfen Sie uns, unser Produkt zu verbessern" }),
     'MBZQTG7YEBNR552F',
-    JSON.stringify({
-      "subject": { "en": "Your feedback matters", "cs": "Vaše zpětná vazba je důležitá", "de": "Ihr Feedback ist wichtig" },
-      "body": { "en": "Hi {{salutation}} {{department}},\n\nWe would love to hear your feedback.", "cs": "Ahoj {{salutation}} {{department}},\n\nRádi bychom slyšeli vaši zpětnou vazbu.", "de": "Hallo {{salutation}} {{department}},\n\nWir würden gerne Ihr Feedback hören." }
-    }),
+    JSON.stringify(emailTemplate),
+    JSON.stringify(emailTemplateFields),
+    JSON.stringify(respondentFields),
+    'en',
     0,
     0,
     'ADMIN001',
     'ADMIN001'
   ]
 );
-console.log('✓ Inserted campaign');
+console.log('✓ Inserted campaign with email template and respondent fields');
+console.log('  Salutation field ID:', salutationFieldId);
+console.log('  Department field ID:', departmentFieldId);
 
 // === SAMPLE RESPONDENT INSERT ===
 // Ukázkový respondent demonstrující custom attributes systém
@@ -372,19 +441,12 @@ console.log('✓ Inserted campaign');
 //   - Token se regeneruje při každém pozvání (proto se neukládá)
 // 
 // === CUSTOM ATTRIBUTES (data JSON) ===
-// Libovolné atributy pro personalizaci průzkumu:
-// - age: number - Věk respondenta (pro segmentaci, statistiky)
-// - gender: string - Pohlaví ('male', 'female', 'other', 'prefer-not-to-say')
-// - salutation: string - Oslovení v emailu ('Mr.', 'Ms.', 'Dr.', 'Prof.')
-// - department: string - Oddělení firmy (pro analýzu podle týmů)
-// - location: string - Pobočka/město (pro geo analýzu)
-// - employee_id: string - Interní ID zaměstnance
-// - join_date: string - Datum nástupu (pro analýzu podle senority)
-// - manager_email: string - Email manažera (pro hierarchické reporty)
-// - custom_field_1, custom_field_2, ... - Libovolné další
+// Data se ukládají pod dataKey z respondent_fields
+// Pro field_ra_... s dataKey="salutation" → data.salutation
+// Pro dictionary typy: {cs: "Pane", en: "Mr.", de: "Herr"}
 // 
 // Tyto atributy jsou dostupné v:
-// 1. Email šablonách (placeholders: {{age}}, {{department}}, ...)
+// 1. Email šablonách (placeholders: __field_ra_...__)
 // 2. Survey logice (conditional questions based on attributes)
 // 3. Response analytics (group by department, location, ...)
 // Insert sample respondent with custom attributes
@@ -393,24 +455,26 @@ const token = crypto.randomBytes(32).toString('hex');
 const emailHash = crypto.createHash('sha256').update(email.toLowerCase()).digest('hex');
 const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 await connection.execute(
-  'INSERT INTO campaign_respondents (respondent_id, campaign_id, email, token, email_hash, token_hash, data, created, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+  'INSERT INTO campaign_respondents (respondent_id, campaign_id, email, token, email_hash, token_hash, data, language, created, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
   [
     'R' + Math.random().toString(36).substring(2, 15).toUpperCase(),
     '4KS624HEW5PBFFSM',
     email,
-    token,  // Add plaintext token
+    token,
     emailHash,
     tokenHash,
     JSON.stringify({
-      age: 35,
-      gender: 'male',
-      salutation: 'Mr.',
-      department: 'Engineering',
-      location: 'Prague'
-    })
+      salutation: {
+        cs: "Pane",
+        en: "Mr.",
+        de: "Herr"
+      },
+      department: "Engineering"
+    }),
+    'en'
   ]
 );
-console.log('✓ Inserted sample respondent with custom attributes (age, gender, salutation, department, location)');
+console.log('✓ Inserted sample respondent with multilingual salutation and department');
 
 // Verify data
 const [rows] = await connection.execute(

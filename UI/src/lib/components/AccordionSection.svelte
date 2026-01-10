@@ -5,16 +5,16 @@
 </script>
 
 <div class="accordion-section">
-  <button 
-    class="accordion-header" 
+  <button
+    class="accordion-header"
     class:open={isOpen}
     on:click={onToggle}
     type="button"
   >
     <span class="accordion-title">{title}</span>
-    <span class="accordion-icon">{isOpen ? '▼' : '▶'}</span>
+    <span class="accordion-icon">{isOpen ? "▼" : "▶"}</span>
   </button>
-  
+
   {#if isOpen}
     <div class="accordion-content">
       <slot />
@@ -29,7 +29,7 @@
     border-radius: 8px;
     background: white;
   }
-  
+
   .accordion-header {
     width: 100%;
     padding: 1rem 1.5rem;
@@ -44,21 +44,21 @@
     color: #333;
     transition: background-color 0.2s;
   }
-  
+
   .accordion-header:hover {
     background-color: #f5f5f5;
   }
-  
+
   .accordion-header.open {
     border-bottom: 1px solid #e0e0e0;
   }
-  
+
   .accordion-icon {
     color: #666;
     font-size: 0.8rem;
     transition: transform 0.2s;
   }
-  
+
   .accordion-content {
     padding: 1.5rem;
   }
