@@ -113,7 +113,7 @@ Resources:
   SesEventsTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: evalytics-ses-events
+      TopicName: !Sub "${AWS::StackName}-ses-events"
 
   SesEventsQueue:
     Type: AWS::SQS::Queue
