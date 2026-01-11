@@ -47,6 +47,8 @@ Globals:
         DB_NAME: !Ref DbName
         SES_FROM: !Ref SesFromEmail
         PUBLIC_BASE_URL: "https://survey.evalytics.cz"
+        API_BASE_URL: "https://api.evalytics.cz/v1/survey"
+        EMAIL_QUEUE_URL: !Ref EmailQueue
 
 Resources:
   HttpApi:
@@ -71,6 +73,11 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: index.handler
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt EmailQueue.QueueName
+        - SESCrudPolicy:
+            IdentityName: !Ref SesFromEmail
       Events:
         Proxy:
           Type: HttpApi
@@ -103,6 +110,9 @@ Resources:
       CodeUri: src/
       Handler: worker.handler
       Timeout: 60
+      Policies:
+        - SESCrudPolicy:
+            IdentityName: !Ref SesFromEmail
       Events:
         FromQueue:
           Type: SQS

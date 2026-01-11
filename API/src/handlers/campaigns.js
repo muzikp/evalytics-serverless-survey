@@ -417,16 +417,190 @@ async function deleteCampaign(user, campaignId) {
 
 async function sendCampaignEmails(event, user, campaignId) {
   const body = parseBody(event);
-  const { email_type = 'invite', test_email } = body;
-
-  // TODO: Implement email sending via SQS
-  // For now, just return a placeholder response
-
-  return apiResponse(202, {
-    message: 'Email sending queued',
-    campaign_id: campaignId,
-    email_type,
-    note: 'Email sending not yet implemented - requires SQS integration'
+  const { type, respondent_ids, test_mode = false } = body;
+  
+  // Validate input
+  if (!type || !['invite', 'reminder'].includes(type)) {
+    return errorResponse(400, 'INVALID_TYPE', 'Type must be "invite" or "reminder"');
+  }
+  
+  // Load campaign with email templates
+  const campaign = await queryOne(
+    `SELECT campaign_id, public_id, title, email_template, reminder_template, 
+            email_template_fields, default_language, version_id
+     FROM campaigns 
+     WHERE campaign_id = ? AND removed = 0`,
+    [campaignId]
+  );
+  
+  if (!campaign) {
+    return errorResponse(404, 'NOT_FOUND', 'Campaign not found');
+  }
+  
+  // Select appropriate template
+  const template = type === 'invite' ? campaign.email_template : campaign.reminder_template;
+  if (!template) {
+    return errorResponse(400, 'NO_TEMPLATE', `No ${type} template configured for this campaign`);
+  }
+  
+  // Parse JSON fields
+  const emailTemplate = typeof template === 'string' ? JSON.parse(template) : template;
+  const customFields = campaign.email_template_fields 
+    ? (typeof campaign.email_template_fields === 'string' 
+        ? JSON.parse(campaign.email_template_fields) 
+        : campaign.email_template_fields)
+    : [];
+  
+  // Build respondent query based on type
+  let sql = `
+    SELECT cr.respondent_id, cr.email, cr.token, cr.unsubscribe_token, cr.data,
+           COALESCE(JSON_UNQUOTE(JSON_EXTRACT(cr.data, '$.language')), ?, 'en') as language
+    FROM campaign_respondents cr
+    WHERE cr.campaign_id = ? AND cr.removed = 0
+  `;
+  
+  const params = [campaign.default_language || 'en', campaignId];
+  
+  // Filter by invitation status
+  if (type === 'invite') {
+    sql += ' AND cr.invitation_sent_at IS NULL';
+  } else {
+    sql += ' AND cr.invitation_sent_at IS NOT NULL';
+  }
+  
+  // Filter by specific respondent IDs if provided
+  if (respondent_ids && Array.isArray(respondent_ids) && respondent_ids.length > 0) {
+    sql += ' AND cr.respondent_id IN (?)';
+    params.push(respondent_ids);
+  }
+  
+  // Exclude blacklisted emails
+  sql += `
+    AND cr.email NOT IN (
+      SELECT email FROM email_blacklist 
+      WHERE unsubscribe_all = 1
+        OR (scope = 'campaign' AND campaign_id = ?)
+    )
+  `;
+  params.push(campaignId);
+  
+  const respondents = await query(sql, params);
+  
+  if (respondents.length === 0) {
+    return apiResponse(200, { 
+      queued: 0, 
+      message: 'No eligible respondents found' 
+    });
+  }
+  
+  // Import email renderer and SQS
+  const { renderEmail, generateUnsubscribeToken } = await import('../utils/emailRenderer.js');
+  const { SQSClient, SendMessageBatchCommand } = await import('@aws-sdk/client-sqs');
+  
+  const sqs = new SQSClient({ region: process.env.AWS_REGION || 'eu-central-1' });
+  const QUEUE_URL = process.env.EMAIL_QUEUE_URL;
+  const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:5173';
+  const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+  
+  // Generate unsubscribe tokens for respondents that don't have one
+  const respondentsNeedingTokens = respondents.filter(r => !r.unsubscribe_token);
+  if (respondentsNeedingTokens.length > 0) {
+    for (const respondent of respondentsNeedingTokens) {
+      const unsubToken = generateUnsubscribeToken();
+      await query(
+        'UPDATE campaign_respondents SET unsubscribe_token = ? WHERE respondent_id = ?',
+        [unsubToken, respondent.respondent_id]
+      );
+      respondent.unsubscribe_token = unsubToken;
+    }
+  }
+  
+  // Prepare email messages
+  const messages = [];
+  const stats = {
+    queued: 0,
+    skipped: 0,
+    errors: []
+  };
+  
+  for (const respondent of respondents) {
+    try {
+      // Parse respondent data
+      respondent.data = respondent.data && typeof respondent.data === 'string' 
+        ? JSON.parse(respondent.data) 
+        : respondent.data || {};
+      
+      // Render email
+      const { subject, html } = renderEmail({
+        template: emailTemplate,
+        language: respondent.language,
+        respondent,
+        campaign,
+        customFields,
+        publicBaseUrl: PUBLIC_BASE_URL,
+        apiBaseUrl: API_BASE_URL
+      });
+      
+      messages.push({
+        Id: respondent.respondent_id,
+        MessageBody: JSON.stringify({
+          campaign_id: campaignId,
+          respondent_id: respondent.respondent_id,
+          recipient_email: respondent.email,
+          email_type: type,
+          subject,
+          html_body: html,
+          from_email: process.env.SES_FROM || 'info@evalytics.cz'
+        })
+      });
+      
+      stats.queued++;
+    } catch (error) {
+      console.error(`Error preparing email for ${respondent.email}:`, error);
+      stats.skipped++;
+      stats.errors.push({
+        respondent_id: respondent.respondent_id,
+        error: error.message
+      });
+    }
+  }
+  
+  // Test mode: return preview without sending
+  if (test_mode) {
+    return apiResponse(200, {
+      test_mode: true,
+      would_send: messages.length,
+      preview: messages.slice(0, 3).map(m => ({
+        respondent_id: m.Id,
+        ...JSON.parse(m.MessageBody)
+      })),
+      stats
+    });
+  }
+  
+  // Send to SQS in batches of 10 (SQS limit)
+  if (QUEUE_URL) {
+    const batchSize = 10;
+    for (let i = 0; i < messages.length; i += batchSize) {
+      const batch = messages.slice(i, i + batchSize);
+      
+      try {
+        await sqs.send(new SendMessageBatchCommand({
+          QueueUrl: QUEUE_URL,
+          Entries: batch
+        }));
+      } catch (error) {
+        console.error('SQS batch send error:', error);
+        return errorResponse(500, 'QUEUE_ERROR', 'Failed to queue emails', { details: error.message });
+      }
+    }
+  } else {
+    console.warn('EMAIL_QUEUE_URL not configured, emails not sent');
+  }
+  
+  return apiResponse(202, { 
+    ...stats,
+    message: `Queued ${stats.queued} ${type} emails for sending` 
   });
 }
 

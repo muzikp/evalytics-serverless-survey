@@ -1,103 +1,202 @@
 // Unsubscribe handler - email opt-out
 import { query, queryOne } from '../db.js';
-import { apiResponse, errorResponse, parseBody, hashValue, formatDateTime } from '../utils.js';
+import { apiResponse, errorResponse, formatDateTime } from '../utils.js';
 import crypto from 'crypto';
 
-const UNSUBSCRIBE_SECRET = process.env.UNSUBSCRIBE_SECRET || process.env.JWT_SECRET;
-
+/**
+ * Handle unsubscribe requests
+ * GET /unsubscribe/{token}?scope=campaign|global
+ */
 export async function handleUnsubscribe(event, method, path) {
-  // GET /unsubscribe - Link from email
-  if (path === '/unsubscribe' && method === 'GET') {
-    const token = event.queryStringParameters?.u;
-    const reason = event.queryStringParameters?.reason;
-    return await unsubscribe(token, reason);
-  }
-
-  // POST /unsubscribe - API endpoint
-  if (path === '/unsubscribe' && method === 'POST') {
-    const body = parseBody(event);
-    return await unsubscribe(body.token, body.reason);
+  // GET /unsubscribe/{token}
+  const match = path.match(/^\/unsubscribe\/([^/]+)/);
+  
+  if (match && method === 'GET') {
+    const token = match[1];
+    const scope = event.queryStringParameters?.scope || 'campaign';
+    return await unsubscribeEmail(token, scope);
   }
 
   return errorResponse(404, 'NOT_FOUND', 'Unsubscribe endpoint not found');
 }
 
-async function unsubscribe(token, reason = null) {
+/**
+ * Unsubscribe email from campaigns
+ */
+async function unsubscribeEmail(token, scope) {
   if (!token) {
-    return errorResponse(400, 'MISSING_TOKEN', 'Unsubscribe token is required');
+    return htmlResponse(400, '<h1>Invalid Link</h1><p>Unsubscribe token is missing.</p>');
   }
-
-  // Verify HMAC signature and decode
-  const decoded = verifyUnsubscribeToken(token);
-  if (!decoded) {
-    return errorResponse(400, 'INVALID_TOKEN', 'Invalid or expired unsubscribe token');
+  
+  if (!['campaign', 'global'].includes(scope)) {
+    return htmlResponse(400, '<h1>Invalid Scope</h1><p>Scope must be "campaign" or "global".</p>');
   }
-
-  const { email, scope, snapshot_id } = decoded;
-  const emailHash = hashValue(email.toLowerCase());
-  const now = formatDateTime();
-
+  
+  // Find respondent by unsubscribe token
+  const respondent = await queryOne(
+    `SELECT cr.respondent_id, cr.email, cr.campaign_id, c.title, c.public_id
+     FROM campaign_respondents cr
+     JOIN campaigns c ON cr.campaign_id = c.campaign_id
+     WHERE cr.unsubscribe_token = ?`,
+    [token]
+  );
+  
+  if (!respondent) {
+    return htmlResponse(404, getUnsubscribeHtml(
+      'Invalid Link', 
+      'This unsubscribe link is not valid or has expired.',
+      null,
+      null
+    ));
+  }
+  
   // Check if already blacklisted
-  const existing = await queryOne(
-    `SELECT * FROM email_black_list
-     WHERE email_hash = ? AND scope = ? AND (snapshot_id = ? OR snapshot_id IS NULL)`,
-    [emailHash, scope, snapshot_id || null]
+  const existingBlacklist = await queryOne(
+    `SELECT * FROM email_blacklist 
+     WHERE email = ? AND (
+       (scope = 'global' AND unsubscribe_all = 1) 
+       OR (scope = 'campaign' AND campaign_id = ? AND unsubscribe_all = 0)
+     )`,
+    [respondent.email, respondent.campaign_id]
   );
-
-  if (existing) {
-    return apiResponse(200, {
-      unsubscribed: true,
-      message: 'Already unsubscribed',
-      scope: scope,
-      snapshot_id: snapshot_id || null
-    });
+  
+  if (existingBlacklist) {
+    const message = scope === 'global' 
+      ? 'You are already unsubscribed from all emails.'
+      : 'You are already unsubscribed from this survey.';
+    return htmlResponse(200, getUnsubscribeHtml(
+      'Already Unsubscribed',
+      message,
+      respondent,
+      scope
+    ));
   }
-
+  
   // Add to blacklist
+  const now = formatDateTime();
   await query(
-    `INSERT INTO email_black_list (email_hash, scope, snapshot_id, reason, created)
-     VALUES (?, ?, ?, ?, ?)`,
-    [emailHash, scope, snapshot_id || null, reason, now]
+    `INSERT INTO email_blacklist 
+     (email, scope, campaign_id, unsubscribe_all, reason, blacklisted_at, blacklisted_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      respondent.email,
+      scope,
+      scope === 'campaign' ? respondent.campaign_id : null,
+      scope === 'global' ? 1 : 0,
+      `User unsubscribed via link (scope: ${scope})`,
+      now,
+      'self'
+    ]
   );
-
-  return apiResponse(200, {
-    unsubscribed: true,
-    message: scope === 'global' ? 'Unsubscribed from all emails' : 'Unsubscribed from this survey',
-    scope: scope,
-    snapshot_id: snapshot_id || null
-  });
+  
+  const title = scope === 'global' ? 'Unsubscribed from All Emails' : 'Unsubscribed from Survey';
+  const message = scope === 'global' 
+    ? 'You have been successfully unsubscribed from all emails from Evalytics Survey Service.'
+    : `You have been successfully unsubscribed from the survey: "${getCampaignTitle(respondent.title)}".`;
+  
+  return htmlResponse(200, getUnsubscribeHtml(title, message, respondent, scope));
 }
 
-export function generateUnsubscribeToken(email, scope = 'snapshot', snapshotId = null) {
-  // Create payload
-  const payload = {
-    email: email.toLowerCase(),
-    scope: scope, // 'snapshot' or 'global'
-    snapshot_id: snapshotId,
-    exp: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year expiry
-  };
-
-  const payloadStr = JSON.stringify(payload);
-  const signature = crypto
-    .createHmac('sha256', UNSUBSCRIBE_SECRET)
-    .update(payloadStr)
-    .digest('base64url');
-
-  return `${Buffer.from(payloadStr).toString('base64url')}.${signature}`;
-}
-
-function verifyUnsubscribeToken(token) {
+/**
+ * Get campaign title in default language
+ */
+function getCampaignTitle(titleJson) {
   try {
-    const [payloadB64, signature] = token.split('.');
-    if (!payloadB64 || !signature) return null;
+    const title = typeof titleJson === 'string' ? JSON.parse(titleJson) : titleJson;
+    return title.en || title.cs || title.de || 'Survey';
+  } catch {
+    return 'Survey';
+  }
+}
 
-    const payloadStr = Buffer.from(payloadB64, 'base64url').toString('utf-8');
-    const expectedSignature = crypto
-      .createHmac('sha256', UNSUBSCRIBE_SECRET)
-      .update(payloadStr)
-      .digest('base64url');
+/**
+ * Generate HTML response
+ */
+function htmlResponse(statusCode, html) {
+  return {
+    statusCode,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8'
+    },
+    body: html
+  };
+}
 
-    if (signature !== expectedSignature) return null;
+/**
+ * Generate unsubscribe confirmation HTML
+ */
+function getUnsubscribeHtml(title, message, respondent, scope) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      max-width: 500px;
+      text-align: center;
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      color: #2d3748;
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+    p {
+      color: #4a5568;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .info {
+      background: #f7fafc;
+      border-left: 4px solid #667eea;
+      padding: 16px;
+      margin-top: 24px;
+      text-align: left;
+      border-radius: 4px;
+    }
+    .info strong {
+      color: #2d3748;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">✓</div>
+    <h1>${title}</h1>
+    <p>${message}</p>
+    ${respondent ? `
+    <div class="info">
+      <strong>Email:</strong> ${respondent.email}<br>
+      ${scope === 'campaign' ? `<strong>Survey:</strong> ${getCampaignTitle(respondent.title)}` : ''}
+    </div>
+    ` : ''}
+  </div>
+</body>
+</html>
+  `;
+}
+
 
     const payload = JSON.parse(payloadStr);
 
