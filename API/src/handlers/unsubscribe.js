@@ -196,17 +196,3 @@ function getUnsubscribeHtml(title, message, respondent, scope) {
 </html>
   `;
 }
-
-
-    const payload = JSON.parse(payloadStr);
-
-    // Check expiry
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    return payload;
-  } catch (err) {
-    return null;
-  }
-}

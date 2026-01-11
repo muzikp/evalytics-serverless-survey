@@ -299,7 +299,7 @@ async function deleteFormVersion(user, versionId) {
     return errorResponse(404, 'NOT_FOUND', 'FormVersion not found');
   }
 
-return apiResponse(200, { message: 'Form version deleted successfully' });
+  return apiResponse(200, { message: 'Form version deleted successfully' });
 }
 
 
